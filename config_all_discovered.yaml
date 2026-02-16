@@ -1,0 +1,126 @@
+anthropic:
+  api_key: ''
+  max_tokens: 4000
+  model: claude-3-sonnet-20240229
+  temperature: 0.1
+logging:
+  level: DEBUG
+  log_file: scraper.log
+  verbose: true
+output:
+  data_dir: data
+  json_schema:
+    claude_use_structured_only: true
+    include_plain_text: true
+    include_structured_content: true
+    max_section_depth: 4
+    single_file_output: true
+  metadata_dir: data/metadata
+  preserve_raw_html: true
+  processed_dir: data/processed
+  raw_dir: data/raw
+rule_categories:
+- Search Records & Pay Fines
+- Court Locations
+- Supreme Court Opinions
+- Jury Duty
+- Supreme Court
+- Supreme Court
+- Watch/Listen to Court
+- View Calendar
+- Filing With the Supreme Court
+- Notices
+- Committees and Boards
+- Administrative Council
+- Board of Law Examiners
+- Disciplinary Board
+- Joint Procedure
+- Judicial Conduct Commission
+- Subscribe
+- Court Connections Judicial Outreach
+- Justices Teaching Institute
+- Taking the Court to Schools
+- Current Justices
+- Surrogate Judges
+- History of the Supreme Court
+- Appealing a Case
+- District Court
+- District Court Judges
+- E-Filing - resources
+- Court Fees
+- Court Interpreters
+- Access to Court Records
+- Alternative Dispute Resolution Roster
+- Parenting Coordinator Roster
+- Parenting Inv/GAL Roster
+- Interest Rate on Judgments
+- Summons by Publication
+- Municipal Courts
+- Bismarck
+- Fargo
+- Grand Forks
+- Minot
+- Williston
+- more...
+- Juvenile Court
+- Juvenile Programs and Services
+- Juvenile Drug Court
+- Domestic Violence Court
+- Adult Hybrid DWI/Drug Courts
+- Office of Administrative Hearings
+- Federal Courts
+- Tribal Courts
+- Veterans Treatment Court
+- Court Rules
+- Administrative Rules
+- Appellate Procedure
+- Civil Procedure
+- Criminal Procedure
+- Rules of Court
+- North Dakota Administrative Code
+- North Dakota Century Code
+- U.S. Supreme Court Opinions
+- Answering a Summons and Complaint
+- Probate an Estate
+- State Court Administration
+- Education
+- Family Law Mediation Program
+- Finance
+- Guardianship Monitoring Program
+- Human Resources
+- Information Technology
+- Annual Report
+- Annual Report - Juvenile
+- State of the Judiciary
+- Administrative Policies
+- Personnel Policy Manual
+- Chart - Salary Grade and Class Specification
+- Pay Ranges (07-25)
+- Supplement I
+- more...
+- Attorney Subscription Management
+- Appellate Procedure
+- Civil Procedure
+- Criminal Procedure
+- Juvenile Procedure
+- Evidence
+- Local Court Procedural and Administrative Rules
+- Administrative Orders
+- Admission to Practice Rules
+- Continuing Legal Education
+- Professional Conduct
+- Lawyer Discipline
+- Standards for Imposing Lawyer Sanctions
+- Code of Judicial Conduct
+- Judicial Conduct Commission
+- Rules on Procedural Rules, Administrative Rules and Administrative Orders
+- Rules on Local Court Procedural Rules and Administrative Rules
+- Limited Practice of Law by Law Students
+- Jobs With Us
+- Security Policy
+scraping:
+  base_url: https://www.ndcourts.gov/legal-resources/rules
+  max_retries: 3
+  request_delay: 0.0
+  timeout: 30
+  user_agent: ND-Court-Rules-Scraper/1.0 (Educational Project)

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+.venv-mac/
+venv/
+env/
+
+# Logs
+*.log
+
+# Data (large/generated)
+data/
+scraper.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config with secrets (use config.yaml template)
+# config.yaml contains local paths — keep it tracked but be mindful
+
+# Validation reports
+validation_report*.txt
+validation_report*.json

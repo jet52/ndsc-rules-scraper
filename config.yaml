@@ -1,0 +1,58 @@
+anthropic:
+  api_key: ''          # Set via env var ANTHROPIC_API_KEY or here
+  haiku_model: claude-haiku-4-5-20251001
+  max_tokens: 1000
+  temperature: 0.1
+
+logging:
+  level: DEBUG
+  log_file: scraper.log
+  verbose: true
+
+output:
+  data_dir: /Users/jerod/cDocs/refs/rules
+  raw_dir: /Users/jerod/cDocs/refs/rules/raw
+  processed_dir: /Users/jerod/cDocs/refs/rules/processed
+  metadata_dir: /Users/jerod/cDocs/refs/rules/metadata
+  preserve_raw_html: true
+  json_schema:
+    claude_use_structured_only: true
+    include_plain_text: true
+    include_structured_content: true
+    max_section_depth: 4
+    single_file_output: true
+
+git:
+  enabled: true
+  repo_dir: /Users/jerod/cDocs/refs/rules
+  author_name: "ND Courts System"
+  author_email: "rules@ndcourts.gov"
+  categories:
+    ndrappp:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndrappp
+    ndrct:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndrct
+    ndsupctadminr:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndsupctadminr
+    ndsupctadminorder:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndsupctadminorder
+
+version_history:
+  fetch_historical_versions: true
+  max_retries: 3
+  request_delay: 1.0
+  minutes_cache_dir: data/minutes_cache
+
+rule_categories:
+- Appellate Procedure
+
+scraping:
+  base_url: https://www.ndcourts.gov/legal-resources/rules
+  max_retries: 3
+  request_delay: 1.0
+  timeout: 30
+  user_agent: ND-Court-Rules-Scraper/1.0 (Educational Project)

@@ -1,0 +1,47 @@
+anthropic:
+  api_key: ''
+  max_tokens: 4000
+  model: claude-3-sonnet-20240229
+  temperature: 0.1
+logging:
+  level: DEBUG
+  log_file: scraper.log
+  verbose: true
+output:
+  data_dir: data
+  json_schema:
+    claude_use_structured_only: true
+    include_plain_text: true
+    include_structured_content: true
+    max_section_depth: 4
+    single_file_output: true
+  metadata_dir: data/metadata
+  preserve_raw_html: true
+  processed_dir: data/processed
+  raw_dir: data/raw
+rule_categories:
+- Appellate Procedure
+- Civil Procedure
+- Criminal Procedure
+- Juvenile Procedure
+- Evidence
+- Rules of Court
+- Administrative Rules
+- Administrative Orders
+- Admission to Practice Rules
+- Continuing Legal Education
+- Professional Conduct
+- Lawyer Discipline
+- Standards for Imposing Lawyer Sanctions
+- Code of Judicial Conduct
+- Judicial Conduct Commission
+- Rules on Procedural Rules, Administrative Rules and Administrative Orders
+- Rules on Local Court Procedural Rules and Administrative Rules
+- Limited Practice of Law by Law Students
+- Local Court Procedural and Administrative Rules
+scraping:
+  base_url: https://www.ndcourts.gov/legal-resources/rules
+  max_retries: 3
+  request_delay: 0.0
+  timeout: 30
+  user_agent: ND-Court-Rules-Scraper/1.0 (Educational Project) 
