@@ -41,7 +41,12 @@ class ProofreadingReportGenerator:
         if not rules:
             if self.logger:
                 self.logger.warning(f"No rule files found in {self.repo_dir}")
-            return {'metadata': {'rules_reviewed': 0}, 'findings': []}
+            return {
+                'metadata': {'rules_reviewed': 0, 'rules_with_findings': 0},
+                'summary': {'total_errors': 0, 'total_warnings': 0},
+                'findings': [],
+                'per_rule': [],
+            }
 
         if self.logger:
             self.logger.info(f"Found {len(rules)} rule files to analyze")
