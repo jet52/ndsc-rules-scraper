@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This scraper builds git repositories from North Dakota court rules. Each rule category (appellate procedure, rules of court, admin rules, admin orders) gets its own git repo where every historical version of every rule is a commit, dated to its effective date.
+This scraper builds git repositories from North Dakota court rules. Each rule category (appellate procedure, rules of court, admin rules, admin orders, civil procedure, criminal procedure, juvenile procedure, evidence) gets its own git repo where every historical version of every rule is a commit, dated to its effective date.
 
 ## Key Commands
 
@@ -35,6 +35,10 @@ Different categories use different URL slug formats:
 - `ndrct`: hyphenated compound (`/ndrct/6-1` for Rule 6.1) and appendix slugs (`/ndrct/appendix-a`)
 - `ndsupctadminr`: hyphenated compound (`/ndsupctadminr/24-1`)
 - `ndsupctadminorder`: pure numeric (`/ndsupctadminorder/4`)
+- `ndrcivp`: pure numeric (`/ndrcivp/4`) and dotted rules (`/ndrcivp/30-1` for Rule 30.1)
+- `ndrcrimp`: pure numeric and dotted rules (`/ndrcrimp/5-1` for Rule 5.1)
+- `ndrjuvp`: pure numeric and dotted rules (`/ndrjuvp/10-2` for Rule 10.2)
+- `ndrev`: pure numeric, three-digit rule numbers (`/ndrev/501`, `/ndrev/1101`)
 
 Version suffixes are appended with a hyphen: `/ndrct/6-1-3` means version suffix "3" of base slug "6-1".
 
