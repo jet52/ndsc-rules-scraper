@@ -40,6 +40,18 @@ git:
     ndsupctadminorder:
       enabled: true
       base_url: https://www.ndcourts.gov/legal-resources/rules/ndsupctadminorder
+    ndrcivp:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndrcivp
+    ndrcrimp:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndrcrimp
+    ndrjuvp:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndrjuvp
+    ndrev:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndrev
 
 proofreading:
   model: claude-sonnet-4-5-20250929

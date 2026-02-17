@@ -29,6 +29,10 @@ class VersionHistoryOrchestrator:
         'ndrct': 'North Dakota Rules of Court',
         'ndsupctadminr': 'North Dakota Supreme Court Administrative Rules',
         'ndsupctadminorder': 'North Dakota Supreme Court Administrative Orders',
+        'ndrcivp': 'North Dakota Rules of Civil Procedure',
+        'ndrcrimp': 'North Dakota Rules of Criminal Procedure',
+        'ndrjuvp': 'North Dakota Rules of Juvenile Procedure',
+        'ndrev': 'North Dakota Rules of Evidence',
     }
 
     def __init__(self, config_path: str = "config.yaml", logger=None):
