@@ -167,6 +167,14 @@ class VersionHistoryExtractor:
                     self.logger.warning(f"Could not parse effective date: {effective_str}")
                 continue
 
+            # Reject sentinel dates (website uses 01/01/0001 as placeholder)
+            if effective_date.year < 1889:
+                if self.logger:
+                    self.logger.warning(
+                        f"Sentinel date {effective_str} for {rule_url} — skipping version"
+                    )
+                continue
+
             obsolete_date = self._parse_date(obsolete_str) if obsolete_str else None
 
             # Extract URL from the "View" link

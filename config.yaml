@@ -41,6 +41,12 @@ git:
       enabled: true
       base_url: https://www.ndcourts.gov/legal-resources/rules/ndsupctadminorder
 
+proofreading:
+  model: claude-sonnet-4-5-20250929
+  max_tokens: 2000
+  temperature: 0.1
+  report_dir: ""                        # Empty = same as repo dir
+
 version_history:
   fetch_historical_versions: true
   max_retries: 3
