@@ -33,3 +33,4 @@ Thumbs.db
 # Validation reports
 validation_report*.txt
 validation_report*.json
+.env
