@@ -243,6 +243,89 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
                 self.logger.error(f"Git command error: {' '.join(cmd)}: {e}")
             raise
 
+    def get_current_file_content(self, rule_number: str) -> Optional[str]:
+        """Read the current content of a rule file from disk.
+
+        Returns:
+            File content as string, or None if the file doesn't exist.
+        """
+        filepath = self.repo_dir / f"rule-{rule_number}.md"
+        if not filepath.exists():
+            return None
+        return filepath.read_text(encoding='utf-8')
+
+    def get_rule_effective_date(self, rule_number: str) -> Optional[date]:
+        """Get the effective date of the most recent commit for a rule file.
+
+        The author date was set to the effective date at commit time, so
+        we parse it from git log.
+
+        Returns:
+            The effective date, or None if the file has no commits.
+        """
+        filename = f"rule-{rule_number}.md"
+        result = self._run_git('log', '-1', '--format=%aI', '--', filename)
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        # Parse ISO 8601 date like "2024-03-01T12:00:00"
+        date_str = result.stdout.strip()
+        try:
+            return datetime.fromisoformat(date_str).date()
+        except ValueError:
+            if self.logger:
+                self.logger.warning(
+                    f"Could not parse author date '{date_str}' for {filename}"
+                )
+            return None
+
+    def amend_rule_version(self, rule_number: str, markdown_content: str) -> bool:
+        """Amend the most recent commit touching a rule file with new content.
+
+        Writes the new content, stages it, and amends the HEAD commit.
+        Does NOT override GIT_AUTHOR_DATE/GIT_COMMITTER_DATE so the
+        original effective date is preserved.
+
+        Returns:
+            True if the amend succeeded.
+        """
+        filename = f"rule-{rule_number}.md"
+        filepath = self.repo_dir / filename
+
+        try:
+            filepath.write_text(markdown_content, encoding='utf-8')
+            self._run_git('add', filename)
+
+            env = os.environ.copy()
+            env['GIT_AUTHOR_NAME'] = self.author_name
+            env['GIT_COMMITTER_NAME'] = self.author_name
+            env['GIT_AUTHOR_EMAIL'] = self.author_email
+            env['GIT_COMMITTER_EMAIL'] = self.author_email
+
+            result = subprocess.run(
+                ['git', 'commit', '--amend', '--no-edit'],
+                cwd=str(self.repo_dir),
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                if self.logger:
+                    self.logger.error(
+                        f"Amend failed for Rule {rule_number}: {result.stderr.strip()}"
+                    )
+                return False
+            return True
+
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Amend error for Rule {rule_number}: {e}")
+            return False
+
+    def restore_rule_file(self, rule_number: str) -> None:
+        """Restore a rule file to its HEAD state (undo uncommitted changes)."""
+        filename = f"rule-{rule_number}.md"
+        self._run_git('checkout', 'HEAD', '--', filename)
+
     def get_commit_count(self) -> int:
         """Get the total number of commits in the repository."""
         result = self._run_git('rev-list', '--count', 'HEAD')

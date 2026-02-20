@@ -15,7 +15,21 @@ python3 build_git_history.py --category ndrappp --verbose
 
 # Build all enabled categories
 python3 build_git_history.py --all --verbose
+
+# Update a single category (detect corrections & new amendments)
+python3 build_git_history.py --update --category ndrappp --verbose
+
+# Update all enabled categories
+python3 build_git_history.py --update --all --verbose
+
+# Run proofreading report for a single category
+python3 build_git_history.py --proofread --category ndrappp --verbose
+
+# Run proofreading report for all enabled categories
+python3 build_git_history.py --proofread --all --verbose
 ```
+
+Proofreading reports (markdown and JSON) are written to the same directory as the scraped rule repos (`git.repo_dir` in config, currently `/Users/jerod/cDocs/refs/rules`). Each category's report lands in its subdirectory (e.g., `{repo_dir}/ndrappp/proofreading-report.md`). Requires the `ANTHROPIC_API_KEY` env var.
 
 ## Architecture
 
@@ -27,6 +41,8 @@ The main entry point is `build_git_history.py`. It wires up the orchestrator whi
 4. `committee_minutes_fetcher.py` — fetches committee meeting minutes PDFs for commit context
 5. `commit_message_builder.py` — builds commit messages from explanatory notes and minutes (optionally uses Claude Haiku)
 6. `git_version_manager.py` — manages git init, file writes, and commits with backdated author/committer dates
+7. `update_orchestrator.py` — incremental update mode: compares current web content against local repos, amends commits for minor corrections, creates new commits for genuine amendments
+8. `rule_link_fetcher.py` — shared module for extracting rule links from category index pages (used by both orchestrators)
 
 ## Rule ID Formats
 

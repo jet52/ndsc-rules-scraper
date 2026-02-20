@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd job: daily update check for ND Court Rules repos.
+
+  Installation:
+    1. Copy this file to ~/Library/LaunchAgents/
+    2. Edit the paths below to match your environment:
+       - SCRAPER_DIR: path to this project's root directory
+       - ANTHROPIC_API_KEY: your Anthropic API key
+       - LOG_DIR: where stdout/stderr logs should go
+    3. Load the job:
+         launchctl load ~/Library/LaunchAgents/com.ndcourts.rules-scraper-update.plist
+    4. To unload:
+         launchctl unload ~/Library/LaunchAgents/com.ndcourts.rules-scraper-update.plist
+    5. To run immediately (for testing):
+         launchctl start com.ndcourts.rules-scraper-update
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ndcourts.rules-scraper-update</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- UPDATE THESE PATHS -->
+        <string>/Users/YOURUSER/path/to/rules-scraper/.venv/bin/python3</string>
+        <string>/Users/YOURUSER/path/to/rules-scraper/build_git_history.py</string>
+        <string>--update</string>
+        <string>--all</string>
+        <string>--verbose</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <!-- UPDATE THIS PATH -->
+    <string>/Users/YOURUSER/path/to/rules-scraper</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>ANTHROPIC_API_KEY</key>
+        <!-- UPDATE THIS VALUE -->
+        <string>sk-ant-...</string>
+    </dict>
+
+    <!-- Daily at 6:00 AM -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>6</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <!-- UPDATE THIS PATH -->
+    <string>/Users/YOURUSER/path/to/rules-scraper/logs/update-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <!-- UPDATE THIS PATH -->
+    <string>/Users/YOURUSER/path/to/rules-scraper/logs/update-stderr.log</string>
+</dict>
+</plist>

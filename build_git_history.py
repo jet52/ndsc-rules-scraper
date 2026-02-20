@@ -6,6 +6,8 @@ Usage:
     python build_git_history.py --category ndrappp
     python build_git_history.py --category ndrct --verbose
     python build_git_history.py --all --verbose
+    python build_git_history.py --update --category ndrappp --verbose
+    python build_git_history.py --update --all --verbose
     python build_git_history.py --proofread --category ndrappp --verbose
     python build_git_history.py --category ndrappp --config config.yaml
 """
@@ -20,6 +22,68 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from utils.logger import get_logger
 from orchestrator.version_history_orchestrator import VersionHistoryOrchestrator
+
+
+def _run_update(args, config, logger):
+    """Run update mode: detect corrections and new amendments."""
+    from orchestrator.update_orchestrator import UpdateOrchestrator
+
+    # Determine categories
+    if args.all:
+        categories = [
+            k for k, v in config.get('git', {}).get('categories', {}).items()
+            if v.get('enabled', False)
+        ]
+    else:
+        categories = [args.category]
+
+    print(f"Updating: {', '.join(categories)}")
+    print(f"Config: {args.config}")
+    print()
+
+    orchestrator = UpdateOrchestrator(
+        config_path=args.config,
+        logger=logger,
+    )
+
+    has_errors = False
+
+    try:
+        for category in categories:
+            print(f"--- Updating: {category} ---")
+            stats = orchestrator.update_category(category)
+
+            print()
+            print("=" * 60)
+            print(f"UPDATE COMPLETE: {category}")
+            print("=" * 60)
+            print(f"Unchanged:   {stats['skipped']}")
+            print(f"Amended:     {stats['amended']}")
+            print(f"New commits: {stats['new_commits']}")
+            print(f"Duration:    {stats.get('duration_seconds', 0):.1f}s")
+
+            if stats['errors']:
+                has_errors = True
+                print(f"Errors:      {len(stats['errors'])}")
+                for err in stats['errors']:
+                    print(f"  - {err}")
+
+            print("=" * 60)
+            print()
+
+    except KeyboardInterrupt:
+        print("\nInterrupted by user")
+        sys.exit(130)
+    except Exception as e:
+        print(f"\nFatal error: {e}")
+        if logger:
+            logger.error(f"Fatal error: {e}")
+        sys.exit(1)
+    finally:
+        orchestrator.cleanup()
+
+    if has_errors:
+        sys.exit(1)
 
 
 def _run_proofread(args, config, logger):
@@ -125,6 +189,11 @@ def main():
         help='Force rebuild even if repository exists',
     )
     parser.add_argument(
+        '--update', '-u',
+        action='store_true',
+        help='Update existing repos: detect minor corrections and new amendments',
+    )
+    parser.add_argument(
         '--proofread',
         action='store_true',
         help='Generate proofreading report for current rules (requires Anthropic API key)',
@@ -133,6 +202,14 @@ def main():
     args = parser.parse_args()
 
     logger = get_logger(args.config, args.verbose)
+
+    # Update mode — separate path, uses UpdateOrchestrator
+    if args.update:
+        import yaml
+        with open(args.config, 'r') as f:
+            config = yaml.safe_load(f)
+        _run_update(args, config, logger)
+        return
 
     # Proofreading mode — separate path, no orchestrator needed
     if args.proofread:
@@ -192,7 +269,7 @@ def main():
 
     except KeyboardInterrupt:
         print("\nInterrupted by user")
-        sys.exit(1)
+        sys.exit(130)
     except Exception as e:
         print(f"\nFatal error: {e}")
         logger.error(f"Fatal error: {e}")

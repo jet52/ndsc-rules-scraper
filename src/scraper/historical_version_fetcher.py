@@ -73,7 +73,7 @@ class HistoricalVersionFetcher:
                     f"(effective {version.effective_date}) for Rule {version_history.rule_number}"
                 )
 
-            content = self._fetch_version(version, version_history)
+            content = self.fetch_version(version, version_history)
             if content:
                 results.append(content)
             else:
@@ -88,7 +88,7 @@ class HistoricalVersionFetcher:
 
         return results
 
-    def _fetch_version(
+    def fetch_version(
         self, version: RuleVersion, history: VersionHistory
     ) -> Optional[RuleVersionContent]:
         """Fetch a single version and convert to markdown."""
