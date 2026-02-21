@@ -92,6 +92,91 @@ def _run_update(args, config, logger):
         sys.exit(1)
 
 
+def _run_fix_crossrefs(args, config, logger):
+    """Fix cross-reference links in rule files."""
+    from utils.crossref_fixer import CrossReferenceFixer
+    from git.git_version_manager import GitVersionManager
+
+    base_repo_dir = config.get('git', {}).get('repo_dir', '/Users/jerod/cDocs/refs/rules')
+    combined_mode = args.all
+    apply_mode = args.apply
+
+    if args.all:
+        categories = [
+            k for k, v in config.get('git', {}).get('categories', {}).items()
+            if v.get('enabled', False)
+        ]
+    else:
+        categories = [args.category]
+
+    total_files = 0
+    total_links = 0
+
+    for category in categories:
+        if combined_mode:
+            repo_dir = base_repo_dir
+        else:
+            repo_dir = f"{base_repo_dir}/{category}"
+
+        fixer = CrossReferenceFixer(
+            repo_dir=repo_dir,
+            category=category,
+            combined=combined_mode,
+            logger=logger,
+        )
+
+        changes = fixer.scan()
+
+        if not changes:
+            print(f"  {category}: no cross-reference links to fix")
+            continue
+
+        # Count link replacements per file
+        cat_links = 0
+        for rel_path, new_content in changes.items():
+            old_path = Path(repo_dir) / rel_path
+            old_content = old_path.read_text(encoding='utf-8')
+            # Count how many links changed
+            import difflib
+            diff_count = sum(
+                1 for line in difflib.unified_diff(
+                    old_content.splitlines(), new_content.splitlines()
+                )
+                if line.startswith('+') and not line.startswith('+++')
+            )
+            cat_links += diff_count
+
+        total_files += len(changes)
+        total_links += cat_links
+
+        print(f"  {category}: {len(changes)} files, ~{cat_links} links to fix")
+        for rel_path in sorted(changes.keys()):
+            print(f"    {rel_path}")
+
+        if apply_mode:
+            git_mgr = GitVersionManager(
+                repo_dir=repo_dir,
+                logger=logger,
+            )
+            success = git_mgr.amend_files(changes)
+            if success:
+                print(f"  → amended HEAD successfully")
+            else:
+                print(f"  → amend FAILED")
+
+    print()
+    print("=" * 60)
+    if apply_mode:
+        print("CROSS-REFERENCE FIX APPLIED")
+    else:
+        print("CROSS-REFERENCE FIX (dry run — use --apply to amend)")
+    print("=" * 60)
+    print(f"Files changed: {total_files}")
+    print(f"Links fixed:   ~{total_links}")
+    print("=" * 60)
+    print()
+
+
 def _run_proofread_mechanical(args, config, logger):
     """Run local mechanical proofreading (no API calls)."""
     import yaml
@@ -432,6 +517,16 @@ examples:
         action='store_true',
         help='With --proofread-interactive: generate individual per-rule files instead of one combined file',
     )
+    parser.add_argument(
+        '--fix-crossrefs',
+        action='store_true',
+        help='Fix absolute cross-reference links in rule files (dry run by default; add --apply to amend HEAD)',
+    )
+    parser.add_argument(
+        '--apply',
+        action='store_true',
+        help='With --fix-crossrefs: actually amend HEAD with fixed links (default is dry-run report only)',
+    )
 
     args = parser.parse_args()
 
@@ -443,6 +538,14 @@ examples:
         with open(args.config, 'r') as f:
             config = yaml.safe_load(f)
         _run_update(args, config, logger)
+        return
+
+    # Cross-reference fix mode
+    if args.fix_crossrefs:
+        import yaml
+        with open(args.config, 'r') as f:
+            config = yaml.safe_load(f)
+        _run_fix_crossrefs(args, config, logger)
         return
 
     # Proofreading modes — separate paths, no orchestrator needed

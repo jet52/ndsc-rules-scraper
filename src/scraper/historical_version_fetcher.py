@@ -16,6 +16,37 @@ from bs4 import BeautifulSoup, Tag
 from scraper.version_history_extractor import VersionHistory, RuleVersion
 
 
+# Pattern matching /legal-resources/rules/{category}/{slug}
+_RULE_LINK_RE = re.compile(r'^/legal-resources/rules/([^/]+)/(.+)$')
+
+
+def _convert_rule_link(href: str, current_category: str) -> str:
+    """Convert an absolute ND Courts rule link to a relative markdown link.
+
+    Args:
+        href: The href value from the HTML (e.g., /legal-resources/rules/ndrct/6-1)
+        current_category: The category of the rule being processed
+
+    Returns:
+        A relative link like rule-6-1.md, ../ndrct/rule-6-1.md, or a full URL
+    """
+    m = _RULE_LINK_RE.match(href)
+    if not m:
+        return href
+
+    category = m.group(1)
+    slug = m.group(2)
+
+    # Sub-path slugs (e.g., appendix/1) have no local file — use full URL
+    if '/' in slug:
+        return f"https://www.ndcourts.gov{href}"
+
+    if category == current_category:
+        return f"rule-{slug}.md"
+    else:
+        return f"../{category}/rule-{slug}.md"
+
+
 @dataclass
 class RuleVersionContent:
     """Content of a specific rule version."""
@@ -138,6 +169,10 @@ class HistoricalVersionFetcher:
         self, soup: BeautifulSoup, title: str, version: RuleVersion
     ) -> str:
         """Convert rule HTML content to clean markdown."""
+        # Extract category from version URL for cross-reference link conversion
+        cat_match = re.search(r'/legal-resources/rules/([^/]+)/', version.url)
+        current_category = cat_match.group(1) if cat_match else ''
+
         article = soup.find('article', class_='rule')
         if not article:
             # Fallback: try the main content area
@@ -156,7 +191,7 @@ class HistoricalVersionFetcher:
             if element.name == 'header':
                 continue
 
-            md = self._element_to_markdown(element, depth=0)
+            md = self._element_to_markdown(element, depth=0, category=current_category)
             if md.strip():
                 parts.append(md)
 
@@ -166,7 +201,7 @@ class HistoricalVersionFetcher:
         markdown = re.sub(r'\n{3,}', '\n\n', markdown)
         return markdown.strip() + '\n'
 
-    def _element_to_markdown(self, element, depth: int = 0) -> str:
+    def _element_to_markdown(self, element, depth: int = 0, category: str = '') -> str:
         """Recursively convert an HTML element to markdown."""
         if not hasattr(element, 'name') or element.name is None:
             text = str(element).strip()
@@ -182,7 +217,7 @@ class HistoricalVersionFetcher:
             return ""
 
         if tag == 'p':
-            text = self._paragraph_to_markdown(element)
+            text = self._paragraph_to_markdown(element, category)
             indent_level = self._get_indent_level(element)
             if indent_level > 0:
                 prefix = '> ' * indent_level
@@ -190,7 +225,7 @@ class HistoricalVersionFetcher:
             return text + "\n\n"
 
         if tag == 'blockquote':
-            return self._blockquote_to_markdown(element, depth) + "\n"
+            return self._blockquote_to_markdown(element, depth, category) + "\n"
 
         if tag in ('ul', 'ol'):
             return self._list_to_markdown(element, tag) + "\n"
@@ -201,7 +236,7 @@ class HistoricalVersionFetcher:
         if tag in ('div', 'section', 'article'):
             parts = []
             for child in element.children:
-                md = self._element_to_markdown(child, depth)
+                md = self._element_to_markdown(child, depth, category)
                 if md.strip():
                     parts.append(md)
             return '\n'.join(parts)
@@ -225,7 +260,7 @@ class HistoricalVersionFetcher:
         px = int(match.group(1))
         return max(px // 30, 0)
 
-    def _paragraph_to_markdown(self, p: Tag) -> str:
+    def _paragraph_to_markdown(self, p: Tag, category: str = '') -> str:
         """Convert a paragraph element to markdown with inline formatting."""
         parts = []
         for child in p.children:
@@ -243,6 +278,7 @@ class HistoricalVersionFetcher:
                 text = child.get_text()
                 href = child.get('href', '')
                 if href and text.strip():
+                    href = _convert_rule_link(href, category)
                     parts.append(f"[{text}]({href})")
                 else:
                     parts.append(text)
@@ -259,7 +295,7 @@ class HistoricalVersionFetcher:
         text = text.replace('\xa0', ' ')
         return text
 
-    def _blockquote_to_markdown(self, bq: Tag, depth: int) -> str:
+    def _blockquote_to_markdown(self, bq: Tag, depth: int, category: str = '') -> str:
         """Convert a blockquote to indented markdown text, handling nesting."""
         segments = []
         inline_parts = []
@@ -281,7 +317,7 @@ class HistoricalVersionFetcher:
                     inline_parts.append(text)
             elif child.name == 'blockquote':
                 flush_inline()
-                nested = self._blockquote_to_markdown(child, depth + 1)
+                nested = self._blockquote_to_markdown(child, depth + 1, category)
                 segments.append(nested)
             elif child.name in ('strong', 'b'):
                 text = child.get_text()
@@ -299,13 +335,14 @@ class HistoricalVersionFetcher:
                 text = child.get_text()
                 href = child.get('href', '')
                 if href and text.strip():
+                    href = _convert_rule_link(href, category)
                     inline_parts.append(f"[{text}]({href})")
                 else:
                     inline_parts.append(text)
             elif child.name == 'p':
                 flush_inline()
                 prefix = '> ' * (depth + 1)
-                segments.append(f"{prefix}{self._paragraph_to_markdown(child)}")
+                segments.append(f"{prefix}{self._paragraph_to_markdown(child, category)}")
             else:
                 text = child.get_text().strip()
                 if text:

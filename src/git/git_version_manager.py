@@ -375,6 +375,46 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
                 self.logger.error(f"Amend error for Rule {rule_number}: {e}")
             return False
 
+    def amend_files(self, file_changes: dict) -> bool:
+        """Amend HEAD with updated file contents.
+
+        Args:
+            file_changes: Dict mapping relative paths to new file content.
+
+        Returns:
+            True if the amend succeeded.
+        """
+        try:
+            for rel_path, content in file_changes.items():
+                filepath = self.repo_dir / rel_path
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                filepath.write_text(content, encoding='utf-8')
+                self._run_git('add', rel_path)
+
+            env = os.environ.copy()
+            env['GIT_AUTHOR_NAME'] = self.author_name
+            env['GIT_COMMITTER_NAME'] = self.author_name
+            env['GIT_AUTHOR_EMAIL'] = self.author_email
+            env['GIT_COMMITTER_EMAIL'] = self.author_email
+
+            result = subprocess.run(
+                ['git', 'commit', '--amend', '--no-edit'],
+                cwd=str(self.repo_dir),
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                if self.logger:
+                    self.logger.error(f"Amend files failed: {result.stderr.strip()}")
+                return False
+            return True
+
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Amend files error: {e}")
+            return False
+
     def restore_rule_file(self, rule_number: str) -> None:
         """Restore a rule file to its HEAD state (undo uncommitted changes)."""
         filename = self._rule_filename(rule_number)
