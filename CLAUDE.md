@@ -36,6 +36,13 @@ python3 build_git_history.py --proofread-interactive --all --per-rule
 # API-based proofreading (requires ANTHROPIC_API_KEY, costs money)
 python3 build_git_history.py --proofread-api --category ndrappp --verbose
 python3 build_git_history.py --proofread-api --all --verbose
+
+# Fix cross-reference links (dry run — report only)
+python3 build_git_history.py --fix-crossrefs --all --verbose
+python3 build_git_history.py --fix-crossrefs --category ndrappp --verbose
+
+# Fix cross-reference links (apply — amends HEAD in each repo)
+python3 build_git_history.py --fix-crossrefs --all --verbose --apply
 ```
 
 Proofreading has three modes:
@@ -55,6 +62,7 @@ The main entry point is `build_git_history.py`. It wires up the orchestrator whi
 6. `git_version_manager.py` — manages git init, file writes, and commits with backdated author/committer dates
 7. `update_orchestrator.py` — incremental update mode: compares current web content against local repos, amends commits for minor corrections, creates new commits for genuine amendments
 8. `rule_link_fetcher.py` — shared module for extracting rule links from category index pages (used by both orchestrators)
+9. `crossref_fixer.py` — post-processes rule files to convert absolute `/legal-resources/rules/` URLs to relative local links; resolves against actual files on disk
 
 ## Rule ID Formats
 
