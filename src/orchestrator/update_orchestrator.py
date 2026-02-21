@@ -34,6 +34,17 @@ class UpdateOrchestrator:
         'ndrcrimp': 'North Dakota Rules of Criminal Procedure',
         'ndrjuvp': 'North Dakota Rules of Juvenile Procedure',
         'ndrev': 'North Dakota Rules of Evidence',
+        'local': 'Local Court Procedural and Administrative Rules',
+        'admissiontopracticer': 'Admission to Practice Rules',
+        'ndrcontinuinglegaled': 'North Dakota Rules for Continuing Legal Education',
+        'ndrprofconduct': 'North Dakota Rules of Professional Conduct',
+        'ndrlawyerdiscipl': 'North Dakota Rules for Lawyer Discipline',
+        'ndstdsimposinglawyersanctions': 'North Dakota Standards for Imposing Lawyer Sanctions',
+        'ndcodejudconduct': 'North Dakota Code of Judicial Conduct',
+        'rjudconductcomm': 'Rules of the Judicial Conduct Commission',
+        'ndrprocr': 'Rules on Procedural Rules, Administrative Rules and Administrative Orders',
+        'ndrlocalctpr': 'Rules on Local Court Procedural Rules and Administrative Rules',
+        'rltdpracticeoflawbylawstudents': 'Limited Practice of Law by Law Students',
     }
 
     def __init__(self, config_path: str = "config.yaml", logger=None):
@@ -136,12 +147,14 @@ class UpdateOrchestrator:
             session.verify = False
         return session
 
-    def update_category(self, category: str) -> Dict:
+    def update_category(self, category: str, combined_mode: bool = False) -> Dict:
         """
         Check a category for minor corrections and new amendments.
 
         Args:
             category: Category identifier (e.g., 'ndrappp')
+            combined_mode: If True, use git_base_dir as repo (not {base_dir}/{category})
+                          and set category_prefix on the git manager.
 
         Returns:
             Stats dict with keys: category, skipped, amended, new_commits, errors
@@ -161,14 +174,26 @@ class UpdateOrchestrator:
             f'https://www.ndcourts.gov/legal-resources/rules/{category}'
         )
         category_name = self.CATEGORY_NAMES.get(category, category)
-        repo_dir = f"{self.git_base_dir}/{category}"
+
+        if combined_mode:
+            repo_dir = self.git_base_dir
+            category_prefix = category
+        else:
+            repo_dir = f"{self.git_base_dir}/{category}"
+            category_prefix = None
 
         # Verify the repo exists
         if not os.path.isdir(os.path.join(repo_dir, '.git')):
-            error = (
-                f"Repository not found at {repo_dir}. "
-                f"Run a full build first: python3 build_git_history.py --category {category}"
-            )
+            if combined_mode:
+                error = (
+                    f"Combined repository not found at {repo_dir}. "
+                    f"Run a full build first: python3 build_git_history.py --all"
+                )
+            else:
+                error = (
+                    f"Repository not found at {repo_dir}. "
+                    f"Run a full build first: python3 build_git_history.py --category {category}"
+                )
             if self.logger:
                 self.logger.error(error)
             stats['errors'].append(error)
@@ -179,6 +204,7 @@ class UpdateOrchestrator:
             author_name=self.git_author_name,
             author_email=self.git_author_email,
             logger=self.logger,
+            category_prefix=category_prefix,
         )
 
         if self.logger:

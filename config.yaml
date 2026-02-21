@@ -52,6 +52,39 @@ git:
     ndrev:
       enabled: true
       base_url: https://www.ndcourts.gov/legal-resources/rules/ndrev
+    local:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/local
+    admissiontopracticer:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/admissiontopracticer
+    ndrcontinuinglegaled:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndrcontinuinglegaled
+    ndrprofconduct:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndrprofconduct
+    ndrlawyerdiscipl:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndrlawyerdiscipl
+    ndstdsimposinglawyersanctions:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndstdsimposinglawyersanctions
+    ndcodejudconduct:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndcodejudconduct
+    rjudconductcomm:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/rjudconductcomm
+    ndrprocr:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndrprocr
+    ndrlocalctpr:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/ndrlocalctpr
+    rltdpracticeoflawbylawstudents:
+      enabled: true
+      base_url: https://www.ndcourts.gov/legal-resources/rules/rltdpracticeoflawbylawstudents
 
 proofreading:
   model: claude-sonnet-4-5-20250929

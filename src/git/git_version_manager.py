@@ -21,18 +21,34 @@ class GitVersionManager:
         author_name: str = "ND Courts System",
         author_email: str = "rules@ndcourts.gov",
         logger=None,
+        category_prefix: Optional[str] = None,
     ):
         self.repo_dir = Path(repo_dir)
         self.author_name = author_name
         self.author_email = author_email
         self.logger = logger
+        self.category_prefix = category_prefix
 
-    def initialize_repository(self, category_name: str = "ND Appellate Rules") -> bool:
+    def _rule_filename(self, rule_number: str) -> str:
+        """Return the relative path for a rule file, respecting category_prefix."""
+        base = f"rule-{rule_number}.md"
+        if self.category_prefix:
+            return f"{self.category_prefix}/{base}"
+        return base
+
+    def initialize_repository(
+        self,
+        category_name: str = "ND Appellate Rules",
+        combined: bool = False,
+        category_names: Optional[dict] = None,
+    ) -> bool:
         """
         Initialize a git repository for the rule category.
 
         Args:
             category_name: Human-readable name of the rule category
+            combined: If True, create a combined repo README listing all categories
+            category_names: Dict mapping category slugs to human-readable names (for combined mode)
 
         Returns:
             True if successful
@@ -49,7 +65,44 @@ class GitVersionManager:
         self._run_git('config', 'user.email', self.author_email)
 
         # Create README
-        readme_content = f"""# {category_name}
+        if combined and category_names:
+            category_list = '\n'.join(
+                f"- **`{slug}/`** — {name}" for slug, name in category_names.items()
+            )
+            readme_content = f"""# North Dakota Court Rules
+
+This repository contains the North Dakota Court Rules with full version history.
+
+Each rule category lives in its own subdirectory, with every rule stored as a
+separate markdown file. Git history tracks how each rule has changed over time,
+with commit dates matching the effective dates of each version.
+
+## Categories
+
+{category_list}
+
+## Usage
+
+```bash
+# View history of a specific rule
+git log --oneline ndrappp/rule-28.md
+
+# See changes between versions
+git log -p ndrct/rule-6-1.md
+
+# View a rule as it existed at a specific date
+git log --before="2010-12-31" --oneline ndrcivp/rule-4.md
+
+# See all changes across all categories on a given date
+git log --after="2020-02-28" --before="2020-03-02" --oneline
+```
+
+## Source
+
+All rules sourced from the [North Dakota Courts website](https://www.ndcourts.gov/legal-resources/rules).
+"""
+        else:
+            readme_content = f"""# {category_name}
 
 This repository contains the North Dakota {category_name} with full version history.
 
@@ -103,7 +156,6 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
             Number of successful commits
         """
         commit_count = 0
-        filename = f"rule-{rule_number}.md"
 
         for content in version_contents:
             success = self.commit_rule_version(
@@ -149,10 +201,11 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
         Returns:
             True if commit was successful
         """
-        filename = f"rule-{rule_number}.md"
+        filename = self._rule_filename(rule_number)
         filepath = self.repo_dir / filename
 
         try:
+            filepath.parent.mkdir(parents=True, exist_ok=True)
             filepath.write_text(markdown_content, encoding='utf-8')
             self._run_git('add', filename)
 
@@ -249,7 +302,7 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
         Returns:
             File content as string, or None if the file doesn't exist.
         """
-        filepath = self.repo_dir / f"rule-{rule_number}.md"
+        filepath = self.repo_dir / self._rule_filename(rule_number)
         if not filepath.exists():
             return None
         return filepath.read_text(encoding='utf-8')
@@ -263,7 +316,7 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
         Returns:
             The effective date, or None if the file has no commits.
         """
-        filename = f"rule-{rule_number}.md"
+        filename = self._rule_filename(rule_number)
         result = self._run_git('log', '-1', '--format=%aI', '--', filename)
         if result.returncode != 0 or not result.stdout.strip():
             return None
@@ -288,10 +341,11 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
         Returns:
             True if the amend succeeded.
         """
-        filename = f"rule-{rule_number}.md"
+        filename = self._rule_filename(rule_number)
         filepath = self.repo_dir / filename
 
         try:
+            filepath.parent.mkdir(parents=True, exist_ok=True)
             filepath.write_text(markdown_content, encoding='utf-8')
             self._run_git('add', filename)
 
@@ -323,7 +377,7 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
 
     def restore_rule_file(self, rule_number: str) -> None:
         """Restore a rule file to its HEAD state (undo uncommitted changes)."""
-        filename = f"rule-{rule_number}.md"
+        filename = self._rule_filename(rule_number)
         self._run_git('checkout', 'HEAD', '--', filename)
 
     def get_commit_count(self) -> int:

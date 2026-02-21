@@ -29,6 +29,7 @@ def _run_update(args, config, logger):
     from orchestrator.update_orchestrator import UpdateOrchestrator
 
     # Determine categories
+    combined_mode = args.all
     if args.all:
         categories = [
             k for k, v in config.get('git', {}).get('categories', {}).items()
@@ -37,7 +38,10 @@ def _run_update(args, config, logger):
     else:
         categories = [args.category]
 
-    print(f"Updating: {', '.join(categories)}")
+    if combined_mode:
+        print(f"Updating combined repo: {', '.join(categories)}")
+    else:
+        print(f"Updating: {', '.join(categories)}")
     print(f"Config: {args.config}")
     print()
 
@@ -51,7 +55,7 @@ def _run_update(args, config, logger):
     try:
         for category in categories:
             print(f"--- Updating: {category} ---")
-            stats = orchestrator.update_category(category)
+            stats = orchestrator.update_category(category, combined_mode=combined_mode)
 
             print()
             print("=" * 60)
@@ -171,7 +175,7 @@ def main():
     parser.add_argument(
         '--all', '-a',
         action='store_true',
-        help='Build all enabled categories',
+        help='Build combined repo with all enabled categories as subdirectories',
     )
     parser.add_argument(
         '--config', '-c',
@@ -224,36 +228,30 @@ def main():
         logger=logger,
     )
 
-    # Determine which categories to process
-    if args.all:
-        import yaml
-        with open(args.config, 'r') as f:
-            config = yaml.safe_load(f)
-        categories = [
-            k for k, v in config.get('git', {}).get('categories', {}).items()
-            if v.get('enabled', False)
-        ]
-        print(f"Building git history for all enabled categories: {', '.join(categories)}")
-    else:
-        categories = [args.category]
-        print(f"Building git history for category: {args.category}")
-
-    print(f"Config: {args.config}")
-    print()
-
     try:
-        for category in categories:
-            print(f"--- Processing: {category} ---")
-            stats = orchestrator.build_git_repository(
-                category=category,
+        if args.all:
+            # Combined mode: build one repo with all categories as subdirectories
+            import yaml
+            with open(args.config, 'r') as f:
+                config = yaml.safe_load(f)
+            categories = [
+                k for k, v in config.get('git', {}).get('categories', {}).items()
+                if v.get('enabled', False)
+            ]
+            print(f"Building combined git repository: {', '.join(categories)}")
+            print(f"Config: {args.config}")
+            print()
+
+            stats = orchestrator.build_combined_repository(
+                categories=categories,
                 force=args.force,
             )
 
             print()
             print("=" * 60)
-            print(f"BUILD COMPLETE: {category}")
+            print("BUILD COMPLETE: combined repository")
             print("=" * 60)
-            print(f"Category:           {stats['category']}")
+            print(f"Categories:         {', '.join(categories)}")
             print(f"Rules found:        {stats['rules_found']}")
             print(f"Rules processed:    {stats['rules_processed']}")
             print(f"Versions committed: {stats['versions_committed']}")
@@ -266,6 +264,38 @@ def main():
 
             print("=" * 60)
             print()
+
+        else:
+            # Single-category mode: build standalone repo in subdirectory
+            categories = [args.category]
+            print(f"Building git history for category: {args.category}")
+            print(f"Config: {args.config}")
+            print()
+
+            for category in categories:
+                print(f"--- Processing: {category} ---")
+                stats = orchestrator.build_git_repository(
+                    category=category,
+                    force=args.force,
+                )
+
+                print()
+                print("=" * 60)
+                print(f"BUILD COMPLETE: {category}")
+                print("=" * 60)
+                print(f"Category:           {stats['category']}")
+                print(f"Rules found:        {stats['rules_found']}")
+                print(f"Rules processed:    {stats['rules_processed']}")
+                print(f"Versions committed: {stats['versions_committed']}")
+                print(f"Duration:           {stats.get('duration_seconds', 0):.1f}s")
+
+                if stats['errors']:
+                    print(f"Errors:             {len(stats['errors'])}")
+                    for err in stats['errors']:
+                        print(f"  - {err}")
+
+                print("=" * 60)
+                print()
 
     except KeyboardInterrupt:
         print("\nInterrupted by user")

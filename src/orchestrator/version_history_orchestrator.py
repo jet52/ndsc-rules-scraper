@@ -34,6 +34,17 @@ class VersionHistoryOrchestrator:
         'ndrcrimp': 'North Dakota Rules of Criminal Procedure',
         'ndrjuvp': 'North Dakota Rules of Juvenile Procedure',
         'ndrev': 'North Dakota Rules of Evidence',
+        'local': 'Local Court Procedural and Administrative Rules',
+        'admissiontopracticer': 'Admission to Practice Rules',
+        'ndrcontinuinglegaled': 'North Dakota Rules for Continuing Legal Education',
+        'ndrprofconduct': 'North Dakota Rules of Professional Conduct',
+        'ndrlawyerdiscipl': 'North Dakota Rules for Lawyer Discipline',
+        'ndstdsimposinglawyersanctions': 'North Dakota Standards for Imposing Lawyer Sanctions',
+        'ndcodejudconduct': 'North Dakota Code of Judicial Conduct',
+        'rjudconductcomm': 'Rules of the Judicial Conduct Commission',
+        'ndrprocr': 'Rules on Procedural Rules, Administrative Rules and Administrative Orders',
+        'ndrlocalctpr': 'Rules on Local Court Procedural Rules and Administrative Rules',
+        'rltdpracticeoflawbylawstudents': 'Limited Practice of Law by Law Students',
     }
 
     def __init__(self, config_path: str = "config.yaml", logger=None):
@@ -289,6 +300,197 @@ class VersionHistoryOrchestrator:
         if self.logger:
             self.logger.info(
                 f"Completed: {stats['rules_processed']} rules, "
+                f"{stats['versions_committed']} versions committed in "
+                f"{stats['duration_seconds']:.1f}s"
+            )
+
+        return stats
+
+    def build_combined_repository(self, categories: List[str], force: bool = False) -> Dict:
+        """
+        Build a single combined git repository with all categories as subdirectories.
+
+        Args:
+            categories: List of category identifiers (e.g., ['ndrappp', 'ndrct', ...])
+            force: If True, rebuild even if repository exists
+
+        Returns:
+            Statistics dictionary
+        """
+        stats = {
+            'categories': categories,
+            'rules_found': 0,
+            'rules_processed': 0,
+            'versions_committed': 0,
+            'errors': [],
+            'start_time': time.time(),
+        }
+
+        repo_dir = self.git_base_dir
+
+        if self.logger:
+            self.logger.info(f"Building combined git repository at {repo_dir}")
+            self.logger.info(f"  Categories: {', '.join(categories)}")
+
+        # Force mode: wipe existing .git and start fresh
+        import shutil
+        from pathlib import Path
+        repo_path = Path(repo_dir)
+        if force and (repo_path / '.git').exists():
+            shutil.rmtree(repo_path / '.git')
+            if self.logger:
+                self.logger.info(f"Force mode: removed existing .git at {repo_dir}")
+
+        # Remove nested .git dirs from old per-category repos — they prevent
+        # the parent repo from tracking files in those subdirectories
+        for category in categories:
+            nested_git = repo_path / category / '.git'
+            if nested_git.exists():
+                shutil.rmtree(nested_git)
+                if self.logger:
+                    self.logger.info(f"Removed nested .git in {category}/")
+            # Also remove old per-category artifacts that shouldn't be in the combined repo
+            for artifact in ['README.md', 'proofreading-report.md', 'proofreading-report.json']:
+                artifact_path = repo_path / category / artifact
+                if artifact_path.exists():
+                    artifact_path.unlink()
+
+        # Initialize git manager at the base dir (no category subdirectory)
+        self.git_manager = GitVersionManager(
+            repo_dir=repo_dir,
+            author_name=self.git_author_name,
+            author_email=self.git_author_email,
+            logger=self.logger,
+        )
+
+        # Build category_names dict for the README
+        category_names = {cat: self.CATEGORY_NAMES.get(cat, cat) for cat in categories}
+
+        self.git_manager.initialize_repository(
+            category_name="North Dakota Court Rules",
+            combined=True,
+            category_names=category_names,
+        )
+
+        # Collect ALL versions across ALL categories
+        # Each entry is (category, content) so we can set category_prefix per commit
+        all_version_work: List[tuple] = []
+
+        for category in categories:
+            category_config = self.config.get('git', {}).get('categories', {}).get(category, {})
+            base_url = category_config.get(
+                'base_url',
+                f'https://www.ndcourts.gov/legal-resources/rules/{category}'
+            )
+            category_name = self.CATEGORY_NAMES.get(category, category)
+
+            if self.logger:
+                self.logger.info(f"Scraping {category_name} ({category})")
+
+            rule_links = self._fetch_rule_links(base_url)
+            stats['rules_found'] += len(rule_links)
+
+            if self.logger:
+                self.logger.info(f"Found {len(rule_links)} rules in {category_name}")
+
+            for i, rule_link in enumerate(rule_links):
+                rule_url = rule_link['url']
+                if self.logger:
+                    self.logger.info(
+                        f"Extracting version history for rule {i + 1}/{len(rule_links)}: "
+                        f"{rule_link.get('title', rule_url)}"
+                    )
+
+                try:
+                    response = self.session.get(rule_url, timeout=30)
+                    if response.status_code != 200:
+                        stats['errors'].append(f"HTTP {response.status_code} for {rule_url}")
+                        continue
+
+                    version_history = self.version_extractor.extract_version_history(
+                        response.text, rule_url
+                    )
+
+                    if not version_history.versions:
+                        if self.logger:
+                            self.logger.warning(f"No versions found for {rule_url}")
+                        stats['errors'].append(f"No versions for {rule_url}")
+                        continue
+
+                    version_contents = self.version_fetcher.fetch_all_versions(version_history)
+
+                    for content in version_contents:
+                        all_version_work.append((category, content))
+
+                    stats['rules_processed'] += 1
+
+                except Exception as e:
+                    error_msg = f"Error processing {rule_url}: {e}"
+                    if self.logger:
+                        self.logger.error(error_msg)
+                    stats['errors'].append(error_msg)
+
+                time.sleep(0.5)
+
+        # Sort globally by (effective_date, category, rule_number)
+        def _version_sort_key(item):
+            cat, v = item
+            rn = v.rule_number
+            try:
+                return (v.effective_date, cat, 0, float(rn), '')
+            except ValueError:
+                pass
+            parts = rn.split('-')
+            if parts[0].isdigit():
+                return (v.effective_date, cat, 0, float(parts[0]), '-'.join(parts[1:]))
+            return (v.effective_date, cat, 1, 0, rn)
+
+        all_version_work.sort(key=_version_sort_key)
+
+        if self.logger:
+            self.logger.info(
+                f"Committing {len(all_version_work)} total versions in chronological order"
+            )
+
+        # Commit all versions, setting category_prefix before each commit
+        prev_dates: Dict[str, date] = {}
+
+        for category, content in all_version_work:
+            self.git_manager.category_prefix = category
+            # Track per (category, rule_number) to avoid cross-category collisions
+            date_key = f"{category}/{content.rule_number}"
+            prev_effective_date = prev_dates.get(date_key)
+
+            commit_body = self.commit_message_builder.build_message(
+                rule_number=content.rule_number,
+                rule_title=content.rule_title,
+                effective_date=content.effective_date,
+                explanatory_notes=content.explanatory_notes,
+                is_current=content.is_current,
+                url=content.url,
+                prev_effective_date=prev_effective_date,
+            )
+
+            success = self.git_manager.commit_rule_version(
+                rule_number=content.rule_number,
+                markdown_content=content.markdown,
+                effective_date=content.effective_date,
+                rule_title=content.rule_title,
+                commit_body=commit_body,
+                url=content.url,
+                is_current=content.is_current,
+            )
+            if success:
+                stats['versions_committed'] += 1
+
+            prev_dates[date_key] = content.effective_date
+
+        stats['end_time'] = time.time()
+        stats['duration_seconds'] = stats['end_time'] - stats['start_time']
+
+        if self.logger:
+            self.logger.info(
+                f"Combined build complete: {stats['rules_processed']} rules, "
                 f"{stats['versions_committed']} versions committed in "
                 f"{stats['duration_seconds']:.1f}s"
             )

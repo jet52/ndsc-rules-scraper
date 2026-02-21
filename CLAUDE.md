@@ -2,7 +2,10 @@
 
 ## Project Overview
 
-This scraper builds git repositories from North Dakota court rules. Each rule category (appellate procedure, rules of court, admin rules, admin orders, civil procedure, criminal procedure, juvenile procedure, evidence) gets its own git repo where every historical version of every rule is a commit, dated to its effective date.
+This scraper builds git repositories from North Dakota court rules. There are two build modes:
+
+- **Combined mode** (`--all`): Builds a single git repo (`nd-court-rules`) at `git.repo_dir` with all categories as subdirectories (e.g., `ndrappp/rule-28.md`, `ndrct/rule-6-1.md`). Commits are interleaved chronologically across all categories.
+- **Single-category mode** (`--category X`): Builds a standalone repo for one category in `{repo_dir}/{category}/` with rule files at the top level (e.g., `rule-28.md`).
 
 ## Key Commands
 
@@ -10,17 +13,17 @@ This scraper builds git repositories from North Dakota court rules. Each rule ca
 # Activate the venv (required)
 source .venv/bin/activate
 
-# Build a single category
-python3 build_git_history.py --category ndrappp --verbose
-
-# Build all enabled categories
+# Build combined repo with all enabled categories
 python3 build_git_history.py --all --verbose
 
-# Update a single category (detect corrections & new amendments)
-python3 build_git_history.py --update --category ndrappp --verbose
+# Build a single standalone category repo
+python3 build_git_history.py --category ndrappp --verbose
 
-# Update all enabled categories
+# Update combined repo (detect corrections & new amendments)
 python3 build_git_history.py --update --all --verbose
+
+# Update a single standalone category repo
+python3 build_git_history.py --update --category ndrappp --verbose
 
 # Run proofreading report for a single category
 python3 build_git_history.py --proofread --category ndrappp --verbose
@@ -55,12 +58,23 @@ Different categories use different URL slug formats:
 - `ndrcrimp`: pure numeric and dotted rules (`/ndrcrimp/5-1` for Rule 5.1)
 - `ndrjuvp`: pure numeric and dotted rules (`/ndrjuvp/10-2` for Rule 10.2)
 - `ndrev`: pure numeric, three-digit rule numbers (`/ndrev/501`, `/ndrev/1101`)
+- `local`: varies by court
+- `admissiontopracticer`: pure numeric
+- `ndrcontinuinglegaled`: pure numeric
+- `ndrprofconduct`: pure numeric and dotted rules
+- `ndrlawyerdiscipl`: pure numeric and dotted rules
+- `ndstdsimposinglawyersanctions`: pure numeric and dotted rules
+- `ndcodejudconduct`: pure numeric and dotted rules
+- `rjudconductcomm`: pure numeric
+- `ndrprocr`: pure numeric
+- `ndrlocalctpr`: pure numeric
+- `rltdpracticeoflawbylawstudents`: pure numeric
 
 Version suffixes are appended with a hyphen: `/ndrct/6-1-3` means version suffix "3" of base slug "6-1".
 
 ## Config
 
-`config.yaml` has absolute paths specific to this machine. Categories are under `git.categories` with `enabled: true/false` flags. The `git.repo_dir` is the base directory; each category gets a subdirectory (e.g., `{repo_dir}/ndrct/`).
+`config.yaml` has absolute paths specific to this machine. Categories are under `git.categories` with `enabled: true/false` flags. The `git.repo_dir` is the base directory. In combined mode (`--all`), the repo lives at `repo_dir` with category subdirectories. In single-category mode (`--category`), each category gets its own repo at `{repo_dir}/{category}/`.
 
 ## Conventions
 
