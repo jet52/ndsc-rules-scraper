@@ -25,14 +25,23 @@ python3 build_git_history.py --update --all --verbose
 # Update a single standalone category repo
 python3 build_git_history.py --update --category ndrappp --verbose
 
-# Run proofreading report for a single category
-python3 build_git_history.py --proofread --category ndrappp --verbose
+# Mechanical proofreading (free, local only — spelling, formatting, cross-references)
+python3 build_git_history.py --proofread-mechanical --category ndrappp --verbose
+python3 build_git_history.py --proofread-mechanical --all --verbose
 
-# Run proofreading report for all enabled categories
-python3 build_git_history.py --proofread --all --verbose
+# Interactive proofreading (generates files to review with Claude Code — no API cost)
+python3 build_git_history.py --proofread-interactive --category ndrappp
+python3 build_git_history.py --proofread-interactive --all --per-rule
+
+# API-based proofreading (requires ANTHROPIC_API_KEY, costs money)
+python3 build_git_history.py --proofread-api --category ndrappp --verbose
+python3 build_git_history.py --proofread-api --all --verbose
 ```
 
-Proofreading reports (markdown and JSON) are written to the same directory as the scraped rule repos (`git.repo_dir` in config, currently `/Users/jerod/cDocs/refs/rules`). Each category's report lands in its subdirectory (e.g., `{repo_dir}/ndrappp/proofreading-report.md`). Requires the `ANTHROPIC_API_KEY` env var.
+Proofreading has three modes:
+- **Mechanical** (`--proofread-mechanical`): Local-only checks using dictionary spell-check, regex patterns, and structural analysis. No API calls. Reports written to `{repo_dir}/{category}/mechanical-proofreading-report.md`.
+- **Interactive** (`--proofread-interactive`): Generates markdown files with rule text and proofreading instructions, designed for review with Claude Code (subscription-based, no API cost). Use `--per-rule` to get individual files instead of one combined file per category.
+- **API** (`--proofread-api`): Sends each rule to Claude Sonnet via Anthropic API. Requires `ANTHROPIC_API_KEY` env var. Reports written to `{repo_dir}/{category}/proofreading-report.md`.
 
 ## Architecture
 

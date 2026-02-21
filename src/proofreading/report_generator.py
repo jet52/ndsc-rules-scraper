@@ -24,6 +24,17 @@ class ProofreadingReportGenerator:
         'ndrcrimp': 'North Dakota Rules of Criminal Procedure',
         'ndrjuvp': 'North Dakota Rules of Juvenile Procedure',
         'ndrev': 'North Dakota Rules of Evidence',
+        'local': 'North Dakota Local Court Rules',
+        'admissiontopracticer': 'Rules for Admission to Practice Law',
+        'ndrcontinuinglegaled': 'Rules for Continuing Legal Education',
+        'ndrprofconduct': 'North Dakota Rules of Professional Conduct',
+        'ndrlawyerdiscipl': 'North Dakota Rules for Lawyer Discipline',
+        'ndstdsimposinglawyersanctions': 'Standards for Imposing Lawyer Sanctions',
+        'ndcodejudconduct': 'North Dakota Code of Judicial Conduct',
+        'rjudconductcomm': 'Rules of the Judicial Conduct Commission',
+        'ndrprocr': 'North Dakota Rules of Procedure',
+        'ndrlocalctpr': 'North Dakota Rules of Local Court Procedure',
+        'rltdpracticeoflawbylawstudents': 'Rules for Limited Practice of Law by Law Students',
     }
 
     def __init__(self, anthropic_client, model: str, repo_dir: str,
