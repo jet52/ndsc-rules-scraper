@@ -22,6 +22,10 @@ python3 build_git_history.py --category ndrappp --verbose
 # Update combined repo (detect corrections & new amendments)
 python3 build_git_history.py --update --all --verbose
 
+# Dry-run update (scrape & compare, report only, no changes applied)
+python3 build_git_history.py --update --dry-run --all --verbose
+python3 build_git_history.py --update --dry-run --category ndrappp --verbose
+
 # Update a single standalone category repo
 python3 build_git_history.py --update --category ndrappp --verbose
 

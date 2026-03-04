@@ -173,7 +173,7 @@ class VersionHistoryOrchestrator:
             f'https://www.ndcourts.gov/legal-resources/rules/{category}'
         )
         category_name = self.CATEGORY_NAMES.get(category, category)
-        repo_dir = f"{self.git_base_dir}/{category}"
+        repo_dir = os.path.join(self.git_base_dir, category)
 
         if self.logger:
             self.logger.info(f"Building git repository for {category_name}")

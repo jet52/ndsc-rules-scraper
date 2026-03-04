@@ -4,12 +4,27 @@ Scrapes North Dakota court rules from [ndcourts.gov](https://www.ndcourts.gov/le
 
 ## Rule Categories
 
-| Category | Config Key | Description |
-|----------|-----------|-------------|
-| Appellate Procedure | `ndrappp` | 38 rules, ~219 versions |
-| Rules of Court | `ndrct` | ~55 rules + 14 appendices, ~212 versions |
-| Administrative Rules | `ndsupctadminr` | ~72 rules |
-| Administrative Orders | `ndsupctadminorder` | 33 orders |
+| Config Key | Description |
+|-----------|-------------|
+| `ndrappp` | Appellate Procedure |
+| `ndrct` | Rules of Court |
+| `ndsupctadminr` | Administrative Rules |
+| `ndsupctadminorder` | Administrative Orders |
+| `ndrcivp` | Civil Procedure |
+| `ndrcrimp` | Criminal Procedure |
+| `ndrjuvp` | Juvenile Procedure |
+| `ndrev` | Evidence |
+| `admissiontopracticer` | Admission to Practice |
+| `ndrcontinuinglegaled` | Continuing Legal Education |
+| `ndrprofconduct` | Professional Conduct |
+| `ndrlawyerdiscipl` | Lawyer Discipline |
+| `ndstdsimposinglawyersanctions` | Standards for Imposing Lawyer Sanctions |
+| `ndcodejudconduct` | Code of Judicial Conduct |
+| `rjudconductcomm` | Judicial Conduct Commission |
+| `ndrprocr` | Procedure Rules |
+| `ndrlocalctpr` | Local Court Practice |
+| `rltdpracticeoflawbylawstudents` | Practice of Law by Law Students |
+| `local` | Local Court Rules |
 
 ## Setup
 
@@ -27,23 +42,51 @@ export ANTHROPIC_API_KEY="sk-..."
 
 ## Usage
 
-Build a single category:
+### Building repositories
 
-```bash
-python3 build_git_history.py --category ndrappp --verbose
-python3 build_git_history.py --category ndrct --verbose
-```
-
-Build all enabled categories:
+Build all enabled categories into a single combined repo with category subdirectories:
 
 ```bash
 python3 build_git_history.py --all --verbose
+```
+
+Build a standalone repo for one category:
+
+```bash
+python3 build_git_history.py --category ndrappp --verbose
 ```
 
 Force rebuild (re-initializes the git repo):
 
 ```bash
 python3 build_git_history.py --category ndrappp --force
+```
+
+### Updating existing repos
+
+Detect corrections (minor text fixes) and new amendments since the last build:
+
+```bash
+python3 build_git_history.py --update --all --verbose
+python3 build_git_history.py --update --category ndrappp --verbose
+```
+
+Dry-run mode reports differences without applying changes:
+
+```bash
+python3 build_git_history.py --update --dry-run --all --verbose
+```
+
+### Cross-reference link fixing
+
+Convert absolute ndcourts.gov URLs in rule files to relative local links:
+
+```bash
+# Report only
+python3 build_git_history.py --fix-crossrefs --all --verbose
+
+# Apply changes (amends HEAD commit)
+python3 build_git_history.py --fix-crossrefs --all --verbose --apply
 ```
 
 ## Proofreading
@@ -85,7 +128,11 @@ Reports are written to `{repo_dir}/{category}/proofreading-report.md` (and `.jso
 
 ## Output
 
-Each category gets its own git repository under the configured `git.repo_dir` (default: `/Users/jerod/cDocs/refs/rules/{category}/`). Inside:
+**Combined mode** (`--all`): A single git repo at `git.repo_dir` with category subdirectories (e.g., `ndrappp/rule-28.md`, `ndrct/rule-6.1.md`). Commits are interleaved chronologically.
+
+**Single-category mode** (`--category`): A standalone repo at `{repo_dir}/{category}/` with rule files at the top level.
+
+Inside each repo:
 
 - `rule-{number}.md` — one file per rule (e.g., `rule-28.md`, `rule-6.1.md`, `rule-appendix-a.md`)
 - Git history with commits dated to each version's effective date
@@ -121,7 +168,8 @@ git log --before="2010-01-01" --oneline  # versions before a date
 
 ```
 build_git_history.py              # CLI entry point
-config.yaml                      # Configuration
+config.yaml                       # Configuration
+launchd/                          # macOS launchd plist for scheduled updates
 src/
   orchestrator/
     version_history_orchestrator.py   # Main pipeline coordinator
@@ -139,5 +187,6 @@ src/
     legal_dictionary.py               # Legal terms supplement and ignore patterns
     report_generator.py               # API-based proofreading with Claude
   utils/
+    crossref_fixer.py                 # Converts absolute URLs to relative local links
     logger.py                         # Logging setup
 ```

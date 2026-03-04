@@ -24,7 +24,7 @@ output:
 
 git:
   enabled: true
-  repo_dir: /Users/jerod/cDocs/refs/rules
+  repo_dir: /Users/jerod/refs/rule
   author_name: "ND Courts System"
   author_email: "rules@ndcourts.gov"
   categories:

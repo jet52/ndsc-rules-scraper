@@ -147,7 +147,7 @@ class UpdateOrchestrator:
             session.verify = False
         return session
 
-    def update_category(self, category: str, combined_mode: bool = False) -> Dict:
+    def update_category(self, category: str, combined_mode: bool = False, dry_run: bool = False) -> Dict:
         """
         Check a category for minor corrections and new amendments.
 
@@ -155,15 +155,19 @@ class UpdateOrchestrator:
             category: Category identifier (e.g., 'ndrappp')
             combined_mode: If True, use git_base_dir as repo (not {base_dir}/{category})
                           and set category_prefix on the git manager.
+            dry_run: If True, report differences without applying any changes.
 
         Returns:
-            Stats dict with keys: category, skipped, amended, new_commits, errors
+            Stats dict with keys: category, skipped, amended, new_commits,
+            corrections_found, new_amendments_found, errors
         """
         stats = {
             'category': category,
             'skipped': 0,
             'amended': 0,
             'new_commits': 0,
+            'corrections_found': 0,
+            'new_amendments_found': 0,
             'errors': [],
             'start_time': time.time(),
         }
@@ -179,7 +183,7 @@ class UpdateOrchestrator:
             repo_dir = self.git_base_dir
             category_prefix = category
         else:
-            repo_dir = f"{self.git_base_dir}/{category}"
+            repo_dir = os.path.join(self.git_base_dir, category)
             category_prefix = None
 
         # Verify the repo exists
@@ -313,6 +317,44 @@ class UpdateOrchestrator:
 
             # Rate limiting
             time.sleep(0.5)
+
+        # Record counts for both modes
+        stats['corrections_found'] = len(corrections)
+        stats['new_amendments_found'] = len(new_amendments)
+
+        # Dry-run: report and return without applying
+        if dry_run:
+            if corrections:
+                print()
+                print(f"--- Corrections found ({len(corrections)}) ---")
+                for rule_link, new_content in corrections:
+                    rule_number = rule_link['rule_number']
+                    old_content = git_manager.get_current_file_content(rule_number) or ""
+                    diff_lines = list(difflib.unified_diff(
+                        old_content.splitlines(keepends=True),
+                        new_content.splitlines(keepends=True),
+                        fromfile=f"rule-{rule_number}.md (local)",
+                        tofile=f"rule-{rule_number}.md (web)",
+                    ))
+                    print(f"\nRule {rule_number}:")
+                    print(''.join(diff_lines))
+
+            if new_amendments:
+                print()
+                print(f"--- New amendments found ({len(new_amendments)}) ---")
+                for rule_link, version_history in new_amendments:
+                    rule_number = rule_link['rule_number']
+                    local_date = git_manager.get_rule_effective_date(rule_number)
+                    current_version = version_history.versions[-1]
+                    if local_date:
+                        print(f"  Rule {rule_number}: local {local_date} → web {current_version.effective_date}")
+                    else:
+                        print(f"  Rule {rule_number}: new rule (web {current_version.effective_date})")
+
+            if not corrections and not new_amendments:
+                print("\nNo corrections or new amendments detected.")
+
+            return self._finalize_stats(stats)
 
         # Phase B: Apply minor corrections (amends)
         for rule_link, new_content in corrections:
@@ -475,7 +517,9 @@ class UpdateOrchestrator:
             self.logger.info(
                 f"Update complete for {stats['category']}: "
                 f"{stats['skipped']} unchanged, "
+                f"{stats['corrections_found']} corrections found, "
                 f"{stats['amended']} amended, "
+                f"{stats['new_amendments_found']} new amendments found, "
                 f"{stats['new_commits']} new commits, "
                 f"{len(stats['errors'])} errors "
                 f"({stats['duration_seconds']:.1f}s)"

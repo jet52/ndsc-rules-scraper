@@ -40,6 +40,14 @@ def _run_update(args, config, logger):
     else:
         categories = [args.category]
 
+    dry_run = args.dry_run
+
+    if dry_run:
+        print("=" * 60)
+        print("DRY RUN — no changes will be applied")
+        print("=" * 60)
+        print()
+
     if combined_mode:
         print(f"Updating combined repo: {', '.join(categories)}")
     else:
@@ -57,16 +65,21 @@ def _run_update(args, config, logger):
     try:
         for category in categories:
             print(f"--- Updating: {category} ---")
-            stats = orchestrator.update_category(category, combined_mode=combined_mode)
+            stats = orchestrator.update_category(category, combined_mode=combined_mode, dry_run=dry_run)
 
             print()
             print("=" * 60)
-            print(f"UPDATE COMPLETE: {category}")
+            if dry_run:
+                print(f"DRY RUN COMPLETE: {category}")
+            else:
+                print(f"UPDATE COMPLETE: {category}")
             print("=" * 60)
-            print(f"Unchanged:   {stats['skipped']}")
-            print(f"Amended:     {stats['amended']}")
-            print(f"New commits: {stats['new_commits']}")
-            print(f"Duration:    {stats.get('duration_seconds', 0):.1f}s")
+            print(f"Unchanged:    {stats['skipped']}")
+            print(f"Corrections:  {stats.get('corrections_found', 0)}")
+            print(f"Amended:      {stats['amended']}")
+            print(f"New amendments: {stats.get('new_amendments_found', 0)}")
+            print(f"New commits:  {stats['new_commits']}")
+            print(f"Duration:     {stats.get('duration_seconds', 0):.1f}s")
 
             if stats['errors']:
                 has_errors = True
@@ -116,7 +129,7 @@ def _run_fix_crossrefs(args, config, logger):
         if combined_mode:
             repo_dir = base_repo_dir
         else:
-            repo_dir = f"{base_repo_dir}/{category}"
+            repo_dir = os.path.join(base_repo_dir, category)
 
         fixer = CrossReferenceFixer(
             repo_dir=repo_dir,
@@ -516,6 +529,11 @@ examples:
         '--per-rule',
         action='store_true',
         help='With --proofread-interactive: generate individual per-rule files instead of one combined file',
+    )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='With --update: report corrections and new amendments without applying changes',
     )
     parser.add_argument(
         '--fix-crossrefs',
