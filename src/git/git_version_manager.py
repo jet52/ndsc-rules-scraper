@@ -305,7 +305,12 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
         filepath = self.repo_dir / self._rule_filename(rule_number)
         if not filepath.exists():
             return None
-        return filepath.read_text(encoding='utf-8')
+        # Read raw bytes and decode without universal-newline translation.
+        # read_text() collapses CRLF/CR to LF, which makes a byte-faithful
+        # comparison against the scraped markdown report phantom "corrections"
+        # for any stored file containing CRLF. Decoding bytes directly keeps
+        # the comparison exact.
+        return filepath.read_bytes().decode('utf-8')
 
     def get_rule_effective_date(self, rule_number: str) -> Optional[date]:
         """Get the effective date of the most recent commit for a rule file.
@@ -373,6 +378,41 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Amend error for Rule {rule_number}: {e}")
+            return False
+
+    def commit_correction(self, rule_number: str, markdown_content: str) -> bool:
+        """Commit a silent same-date correction as a NEW commit dated now.
+
+        Unlike amend_rule_version (which rewrites HEAD and, in combined mode,
+        can fold the change into an unrelated rule's commit), this stages only
+        the corrected rule file and creates its own commit at the real
+        observation time. The rule's effective date is unchanged, so the commit
+        is intentionally not backdated.
+
+        Returns:
+            True if the commit succeeded.
+        """
+        filename = self._rule_filename(rule_number)
+        filepath = self.repo_dir / filename
+
+        try:
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            filepath.write_text(markdown_content, encoding='utf-8')
+            self._run_git('add', filename)
+
+            message = (
+                f"Rule {rule_number}: Silent correction (effective date unchanged)\n\n"
+                "Text correction published by the court without a new effective "
+                "date. Recorded at the time the change was detected."
+            )
+            # No commit_date override -> recorded at the real detection time.
+            return self._commit(message=message)
+
+        except Exception as e:
+            if self.logger:
+                self.logger.error(
+                    f"Correction commit error for Rule {rule_number}: {e}"
+                )
             return False
 
     def amend_files(self, file_changes: dict) -> bool:

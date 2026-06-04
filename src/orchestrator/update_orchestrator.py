@@ -255,6 +255,16 @@ class UpdateOrchestrator:
                         self.logger.warning(f"No versions found for {rule_url}")
                     continue
 
+                # Normalize the rule identifier to the title-derived form used by
+                # the initial build to name files. The index slug is hyphenated
+                # (e.g. "2-1" for Rule 2.1), but files are committed as
+                # "rule-2.1.md" from version_history.rule_number. Using the slug
+                # for local lookups misses, making every dotted rule look "new".
+                # Reassigning here keeps detection consistent with the build and
+                # propagates to the correction/amendment phases via rule_link.
+                rule_number = version_history.rule_number
+                rule_link['rule_number'] = rule_number
+
                 # Get the current (latest) version from the website
                 current_version = version_history.versions[-1]  # sorted oldest-first
 
@@ -356,11 +366,14 @@ class UpdateOrchestrator:
 
             return self._finalize_stats(stats)
 
-        # Phase B: Apply minor corrections (amends)
+        # Phase B: Apply minor corrections as new, dated commits.
+        # Each correction is committed on its own file at detection time rather
+        # than amended into HEAD — amending HEAD in combined mode folds the
+        # change into whatever unrelated rule's commit is currently at the tip.
         for rule_link, new_content in corrections:
             rule_number = rule_link['rule_number']
             if self.logger:
-                self.logger.info(f"Amending correction for Rule {rule_number}")
+                self.logger.info(f"Committing correction for Rule {rule_number}")
 
             # Log the diff
             old_content = git_manager.get_current_file_content(rule_number) or ""
@@ -373,15 +386,15 @@ class UpdateOrchestrator:
             if diff_lines and self.logger:
                 self.logger.info(f"  Diff for Rule {rule_number}:\n{''.join(diff_lines)}")
 
-            success = git_manager.amend_rule_version(rule_number, new_content)
+            success = git_manager.commit_correction(rule_number, new_content)
             if success:
                 stats['amended'] += 1
                 if self.logger:
-                    self.logger.info(f"  Amended Rule {rule_number} successfully")
+                    self.logger.info(f"  Committed correction for Rule {rule_number}")
             else:
                 # Restore original content
                 git_manager.restore_rule_file(rule_number)
-                error_msg = f"Amend failed for Rule {rule_number}, restored original"
+                error_msg = f"Correction commit failed for Rule {rule_number}, restored original"
                 if self.logger:
                     self.logger.error(error_msg)
                 stats['errors'].append(error_msg)
