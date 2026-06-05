@@ -27,8 +27,9 @@ scraper.log
 .DS_Store
 Thumbs.db
 
-# Config with secrets (use config.yaml template)
-# config.yaml contains local paths — keep it tracked but be mindful
+# Local config — may hold an API key and local paths. Copy config.example.yaml
+# to config.yaml and edit locally. The example is tracked; config.yaml is not.
+config.yaml
 
 # Validation reports
 validation_report*.txt

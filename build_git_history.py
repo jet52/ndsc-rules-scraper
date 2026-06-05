@@ -110,7 +110,7 @@ def _run_fix_crossrefs(args, config, logger):
     from utils.crossref_fixer import CrossReferenceFixer
     from git.git_version_manager import GitVersionManager
 
-    base_repo_dir = config.get('git', {}).get('repo_dir', '/Users/jerod/cDocs/refs/rules')
+    base_repo_dir = config.get('git', {}).get('repo_dir', 'data/rules')
     combined_mode = args.all
     apply_mode = args.apply
 
@@ -209,7 +209,7 @@ def _run_proofread_mechanical(args, config, logger):
         categories = [args.category]
 
     proof_config = config.get('proofreading', {})
-    base_repo_dir = config.get('git', {}).get('repo_dir', '/Users/jerod/cDocs/refs/rules')
+    base_repo_dir = config.get('git', {}).get('repo_dir', 'data/rules')
 
     for category in categories:
         repo_dir = f"{base_repo_dir}/{category}"
@@ -261,7 +261,7 @@ def _run_proofread_interactive(args, config, logger):
         categories = [args.category]
 
     proof_config = config.get('proofreading', {})
-    base_repo_dir = config.get('git', {}).get('repo_dir', '/Users/jerod/cDocs/refs/rules')
+    base_repo_dir = config.get('git', {}).get('repo_dir', 'data/rules')
 
     CATEGORY_NAMES = {
         'ndrappp': 'North Dakota Rules of Appellate Procedure',
@@ -407,7 +407,7 @@ def _run_proofread_api(args, config, logger):
     model = proof_config.get('model', 'claude-sonnet-4-5-20250929')
     max_tokens = proof_config.get('max_tokens', 2000)
     temperature = proof_config.get('temperature', 0.1)
-    base_repo_dir = config.get('git', {}).get('repo_dir', '/Users/jerod/cDocs/refs/rules')
+    base_repo_dir = config.get('git', {}).get('repo_dir', 'data/rules')
 
     for category in categories:
         repo_dir = f"{base_repo_dir}/{category}"

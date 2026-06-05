@@ -64,7 +64,7 @@ class UpdateOrchestrator:
         git_config = self.config.get('git', {})
         self.git_author_name = git_config.get('author_name', 'ND Courts System')
         self.git_author_email = git_config.get('author_email', 'rules@ndcourts.gov')
-        self.git_base_dir = git_config.get('repo_dir', '/Users/jerod/cDocs/refs/rules')
+        self.git_base_dir = git_config.get('repo_dir', 'data/rules')
 
         # Initialize committee minutes fetcher and commit message builder
         vh_config = self.config.get('version_history', {})

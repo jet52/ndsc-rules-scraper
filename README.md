@@ -157,6 +157,12 @@ git log --before="2010-01-01" --oneline  # versions before a date
 
 ## Configuration
 
+Copy the template to create your local config (which is gitignored):
+
+```bash
+cp config.example.yaml config.yaml
+```
+
 `config.yaml` controls everything. Key sections:
 
 - `git.categories` — enable/disable categories, set base URLs
