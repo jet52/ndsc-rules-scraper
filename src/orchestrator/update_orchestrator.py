@@ -169,6 +169,7 @@ class UpdateOrchestrator:
             'corrections_found': 0,
             'new_amendments_found': 0,
             'errors': [],
+            'redated': [],
             'start_time': time.time(),
         }
 
@@ -407,6 +408,48 @@ class UpdateOrchestrator:
 
         return self._finalize_stats(stats)
 
+    @staticmethod
+    def _words_only(text: str) -> str:
+        """Collapse a rule's markdown to its non-whitespace characters.
+
+        A re-dated version is republished with the same words but often not the
+        same spacing — the court's 2017 "technical correction" to N.D.R. Lawyer
+        Discipl. 4.5 changed `1.The petitioner` to `1. The petitioner` and
+        `programs.If` to `programs. If`, and nothing else. Comparing on words
+        alone is what lets us recognize the version across that churn. It is
+        deliberately blunt: it cannot distinguish two versions that differ only
+        in whitespace, which is exactly why the caller takes the NEWEST match.
+        """
+        return ''.join(text.split())
+
+    def _reanchor_by_text(
+        self,
+        rule_number: str,
+        version_history: VersionHistory,
+        git_manager: GitVersionManager,
+    ):
+        """Locate the local file's version in the web history by text identity.
+
+        Returns (index, RuleVersion) of the newest web version whose words match
+        the local file, or (None, None). Searches newest-first and stops at the
+        first match, so a wedged rule costs one fetch in the common case.
+        """
+        local_content = git_manager.get_current_file_content(rule_number)
+        if not local_content:
+            return None, None
+
+        local_words = self._words_only(local_content)
+        versions = version_history.versions
+
+        for idx in range(len(versions) - 1, -1, -1):
+            version = versions[idx]
+            content = self.version_fetcher.fetch_version(version, version_history)
+            time.sleep(self.request_delay)
+            if content and self._words_only(content.markdown) == local_words:
+                return idx, version
+
+        return None, None
+
     def _apply_new_amendments(
         self,
         new_amendments: List,
@@ -432,15 +475,46 @@ class UpdateOrchestrator:
                         break
 
                 if anchor_idx is None:
+                    # The court sometimes re-dates a version in place: the page's
+                    # stated effective date changes while the words do not. The
+                    # local date then names a version the site no longer lists,
+                    # every later run re-detects the same "new amendment" and
+                    # skips it, and the rule is wedged forever. Fall back to
+                    # identifying the anchor by its text instead of its date.
+                    anchor_idx, matched = self._reanchor_by_text(
+                        rule_number, version_history, git_manager
+                    )
+                    if anchor_idx is None:
+                        if self.logger:
+                            self.logger.warning(
+                                f"  Could not find anchor date {local_date} in version history "
+                                f"for Rule {rule_number}, and no web version matches the local "
+                                f"text — skipping"
+                            )
+                        stats['errors'].append(
+                            f"Anchor date {local_date} not found for Rule {rule_number}"
+                        )
+                        continue
+
+                    # Re-anchoring keeps the backfill moving, but the local date
+                    # is now known-wrong and only a human can decide how to
+                    # restate it (the git commit date and any downstream
+                    # point-in-time store both encode it). Surface it loudly
+                    # rather than silently adopting the site's new date.
                     if self.logger:
                         self.logger.warning(
-                            f"  Could not find anchor date {local_date} in version history "
-                            f"for Rule {rule_number} — skipping"
+                            f"  Rule {rule_number} appears RE-DATED by the court: local "
+                            f"effective date {local_date} is absent from the web version "
+                            f"history, but the local text matches the web version effective "
+                            f"{matched.effective_date}. Re-anchoring there; the local date "
+                            f"needs manual correction."
                         )
-                    stats['errors'].append(
-                        f"Anchor date {local_date} not found for Rule {rule_number}"
-                    )
-                    continue
+                    stats['redated'].append({
+                        'rule_number': rule_number,
+                        'local_date': str(local_date),
+                        'web_date': str(matched.effective_date),
+                        'url': matched.url,
+                    })
 
                 # Versions after the anchor are missing
                 missing_versions = version_history.versions[anchor_idx + 1:]
@@ -534,6 +608,7 @@ class UpdateOrchestrator:
                 f"{stats['amended']} amended, "
                 f"{stats['new_amendments_found']} new amendments found, "
                 f"{stats['new_commits']} new commits, "
+                f"{len(stats.get('redated', []))} re-dated, "
                 f"{len(stats['errors'])} errors "
                 f"({stats['duration_seconds']:.1f}s)"
             )

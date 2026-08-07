@@ -81,6 +81,19 @@ def _run_update(args, config, logger):
             print(f"New commits:  {stats['new_commits']}")
             print(f"Duration:     {stats.get('duration_seconds', 0):.1f}s")
 
+            # A re-dated version is not an error — the backfill continued — but
+            # it leaves a known-wrong effective date in git and in any
+            # downstream point-in-time store, so it must not scroll past
+            # unnoticed among the routine reserved-rule 404s.
+            if stats.get('redated'):
+                print()
+                print(f"RE-DATED BY THE COURT — NEEDS REVIEW: {len(stats['redated'])}")
+                for item in stats['redated']:
+                    print(
+                        f"  - Rule {item['rule_number']}: local {item['local_date']} "
+                        f"-> web {item['web_date']}  ({item['url']})"
+                    )
+
             if stats['errors']:
                 has_errors = True
                 print(f"Errors:      {len(stats['errors'])}")
