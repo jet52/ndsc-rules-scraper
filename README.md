@@ -2,6 +2,20 @@
 
 Scrapes North Dakota court rules from [ndcourts.gov](https://www.ndcourts.gov/legal-resources/rules) and builds git repositories where each rule is a markdown file and each historical version is a commit dated to its effective date.
 
+## Not an Official Court Product
+
+This is an independent, open-source project published by an individual in a
+personal capacity, consistent with Rule 3.1 of the North Dakota Code of Judicial
+Conduct. It is not authorized, endorsed, or maintained by the North Dakota
+Supreme Court or the state court system.
+
+The rule text it produces is machine-extracted and the version history is
+reconstructed from the site's own version tables — a scrape can miss an
+amendment, and neither the text nor its dating is certified. Do not cite or rely
+on the output. For the authoritative text of any rule, consult the official
+publication at
+[ndcourts.gov](https://www.ndcourts.gov/legal-resources/rules).
+
 ## Rule Categories
 
 | Config Key | Description |
