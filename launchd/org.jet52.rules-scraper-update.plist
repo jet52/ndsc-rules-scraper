@@ -10,16 +10,16 @@
        - ANTHROPIC_API_KEY: your Anthropic API key
        - LOG_DIR: where stdout/stderr logs should go
     3. Load the job:
-         launchctl load ~/Library/LaunchAgents/com.ndcourts.rules-scraper-update.plist
+         launchctl load ~/Library/LaunchAgents/org.jet52.rules-scraper-update.plist
     4. To unload:
-         launchctl unload ~/Library/LaunchAgents/com.ndcourts.rules-scraper-update.plist
+         launchctl unload ~/Library/LaunchAgents/org.jet52.rules-scraper-update.plist
     5. To run immediately (for testing):
-         launchctl start com.ndcourts.rules-scraper-update
+         launchctl start org.jet52.rules-scraper-update
 -->
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.ndcourts.rules-scraper-update</string>
+    <string>org.jet52.rules-scraper-update</string>
 
     <key>ProgramArguments</key>
     <array>
