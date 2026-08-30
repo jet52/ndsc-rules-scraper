@@ -106,25 +106,49 @@ class VersionHistoryExtractor:
 
         return "Untitled Rule"
 
+    # Instrument designators are read from the START of the title only. The
+    # earlier pattern searched for "rule N" anywhere in the title, so
+    # "TABLE A. SPECIAL STATUTORY PROCEEDINGS UNDER RULE 81" was filed as
+    # Rule 81 and "APPENDIX K. RULE 3.5 ELECTRONIC FILING REQUIREMENTS" as
+    # Rule 3.5 -- the foreign document overwrote the rule's own file
+    # (N.D.R.Civ.P. 81; N.D.R.Ct. 3.5 / 8.8 / 8.9 / 8.3 in the mirror, found
+    # 2026-08-30). It also captured at most two numeric levels, so
+    # "RULE 8.3.1" became "8.3" and overwrote Rule 8.3.
+    _DESIGNATOR_RE = re.compile(
+        r'^\s*(?:administrative\s+)?(?:rule|order)\s+(\d+(?:\.\d+)*)(?![\d.]*\d)',
+        re.IGNORECASE,
+    )
+    _APPENDIX_RE = re.compile(
+        r'^\s*appendix\s+([A-Za-z])\b(?:\.?\s+to\s+rule\s+(\d+(?:\.\d+)*))?',
+        re.IGNORECASE,
+    )
+    _SLUG_RE = re.compile(r'/legal-resources/rules/[^/]+/([\w][\w-]*)$')
+
     def _extract_rule_number(self, title: str, url: str) -> str:
-        """Extract rule number from title or URL."""
-        # Try title: "RULE 6.1. ..." → "6.1", "RULE 35. ..." → "35"
-        match = re.search(r'rule\s+(\d+(?:\.\d+)?)', title, re.IGNORECASE)
+        """Extract the rule identifier used to name the mirror file.
+
+        Title first, URL slug second. The title is authoritative for dotted
+        numbers (the index slug spells Rule 2.1 as "2-1") but only when its
+        LEADING designator is a rule/order number; a table or appendix that
+        mentions a rule in its title keeps its own identity.
+        """
+        match = self._DESIGNATOR_RE.match(title)
         if match:
             return match.group(1)
 
-        # Try "ORDER 4. ..." → "4"
-        match = re.search(r'order\s+(\d+)', title, re.IGNORECASE)
+        # "APPENDIX A. ..." -> "appendix-a"; "Appendix A to Rule 8.9 ..." ->
+        # "appendix-a-to-rule-8.9" (N.D.R.Ct. has both, and they are
+        # different documents).
+        match = self._APPENDIX_RE.match(title)
         if match:
-            return match.group(1)
+            ident = f"appendix-{match.group(1).lower()}"
+            if match.group(2):
+                ident += f"-to-rule-{match.group(2)}"
+            return ident
 
-        # Try "APPENDIX A" → "appendix-a"
-        match = re.search(r'appendix\s+([A-Za-z])\b', title, re.IGNORECASE)
-        if match:
-            return f"appendix-{match.group(1).lower()}"
-
-        # Fallback to URL slug (last path segment)
-        url_match = re.search(r'/legal-resources/rules/[^/]+/([\w][\w-]*)$', url)
+        # Fallback to URL slug (last path segment): "Table-A", "Appendix",
+        # "preamble", "canon-1", "9A".
+        url_match = self._SLUG_RE.search(url)
         if url_match:
             return url_match.group(1)
 

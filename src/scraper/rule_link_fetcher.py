@@ -57,9 +57,10 @@ def fetch_rule_links(
         if not match:
             continue
 
-        # Skip blacklisted paths
+        # Skip blacklisted paths. 'tables' is NOT excluded: ndrappp/tables is a
+        # versioned document ("TABLES", eff. 2001-01-01), found missing 2026-08-30.
         href_lower = href.lower()
-        if any(kw in href_lower for kw in ['committee', 'tables', 'joint', 'meeting']):
+        if any(kw in href_lower for kw in ['committee', 'joint', 'meeting']):
             continue
 
         full_url = urljoin('https://www.ndcourts.gov', href)
@@ -84,7 +85,7 @@ def fetch_rule_links(
             continue
 
         href_lower = href.lower()
-        if any(kw in href_lower for kw in ['committee', 'tables', 'joint', 'meeting']):
+        if any(kw in href_lower for kw in ['committee', 'joint', 'meeting']):
             continue
 
         full_url = href if href.startswith('http') else urljoin('https://www.ndcourts.gov', href)
