@@ -288,6 +288,33 @@ class UpdateOrchestrator:
                         self.logger.info(f"  New rule detected: {rule_number}")
                     new_amendments.append((rule_link, version_history))
 
+                elif current_version.effective_date is None:
+                    # The court publishes no effective date for this page
+                    # (version table row 01/01/0001). Text is the only
+                    # comparison available: same text = no change, different
+                    # text = a correction under the same (unknown) date.
+                    if local_content == current_content.markdown:
+                        if self.logger:
+                            self.logger.debug(f"  No change: Rule {rule_number} (date not published)")
+                        stats['skipped'] += 1
+                    else:
+                        if self.logger:
+                            self.logger.info(
+                                f"  Minor correction detected: Rule {rule_number} (date not published)"
+                            )
+                        corrections.append((rule_link, current_content.markdown))
+
+                elif local_date is None:
+                    # Local history has only unpublished-date commits and the
+                    # court now publishes dated versions: every web version is
+                    # new to us; _apply_new_amendments takes them all.
+                    if self.logger:
+                        self.logger.info(
+                            f"  New amendment detected: Rule {rule_number} "
+                            f"(local: date not published, web: {current_version.effective_date})"
+                        )
+                    new_amendments.append((rule_link, version_history))
+
                 elif local_date == current_version.effective_date:
                     if local_content == current_content.markdown:
                         # No change
@@ -571,14 +598,15 @@ class UpdateOrchestrator:
         # Sort globally by (effective_date, rule_number) using same key as initial build
         def _version_sort_key(v):
             rn = v.rule_number
+            eff = v.effective_date or date.min
             try:
-                return (v.effective_date, 0, float(rn), '')
+                return (eff, 0, float(rn), '')
             except ValueError:
                 pass
             parts = rn.split('-')
             if parts[0].isdigit():
-                return (v.effective_date, 0, float(parts[0]), '-'.join(parts[1:]))
-            return (v.effective_date, 1, 0, rn)
+                return (eff, 0, float(parts[0]), '-'.join(parts[1:]))
+            return (eff, 1, 0, rn)
 
         all_missing_versions.sort(key=_version_sort_key)
 
@@ -599,15 +627,20 @@ class UpdateOrchestrator:
         for content in all_missing_versions:
             prev_effective_date = prev_dates.get(content.rule_number)
 
-            commit_body = self.commit_message_builder.build_message(
-                rule_number=content.rule_number,
-                rule_title=content.rule_title,
-                effective_date=content.effective_date,
-                explanatory_notes=content.explanatory_notes,
-                is_current=content.is_current,
-                url=content.url,
-                prev_effective_date=prev_effective_date,
-            )
+            if content.effective_date is None:
+                # No date to filter committee minutes against; the git
+                # manager writes the title/source/status body itself.
+                commit_body = ""
+            else:
+                commit_body = self.commit_message_builder.build_message(
+                    rule_number=content.rule_number,
+                    rule_title=content.rule_title,
+                    effective_date=content.effective_date,
+                    explanatory_notes=content.explanatory_notes,
+                    is_current=content.is_current,
+                    url=content.url,
+                    prev_effective_date=prev_effective_date,
+                )
 
             success = git_manager.commit_rule_version(
                 rule_number=content.rule_number,

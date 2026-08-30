@@ -14,11 +14,16 @@ from bs4 import BeautifulSoup
 @dataclass
 class RuleVersion:
     """Represents a single version of a rule."""
-    effective_date: date
+    effective_date: Optional[date]  # None: the court publishes no date (see date_unpublished)
     obsolete_date: Optional[date]
     url: str
     version_suffix: Optional[str]  # e.g., "10" from "rule-28-10"
     is_current: bool
+    # The court's version table shows a single row dated 01/01/0001 for ~45
+    # rules (N.D.R. Proc. R., Local Ct. Pr., CLE, Ltd. Practice, several
+    # appendices and tables). That sentinel is "effective date not published",
+    # not "no version": the page IS the current text. Ratified JT 2026-08-30.
+    date_unpublished: bool = False
 
 
 @dataclass
@@ -71,8 +76,8 @@ class VersionHistoryExtractor:
                     is_current=True,
                 )]
 
-        # Sort oldest to newest
-        versions.sort(key=lambda v: v.effective_date)
+        # Sort oldest to newest (an unpublished date can only be the sole version)
+        versions.sort(key=lambda v: v.effective_date or date.min)
 
         history = VersionHistory(
             rule_number=rule_number,
@@ -177,6 +182,7 @@ class VersionHistoryExtractor:
         base_slug = rule_url.rstrip('/').split('/')[-1]
 
         rows = table.find_all('tr')
+        sentinels: List[RuleVersion] = []
         for row in rows:
             cells = row.find_all('td')
             if len(cells) < 2:
@@ -191,13 +197,9 @@ class VersionHistoryExtractor:
                     self.logger.warning(f"Could not parse effective date: {effective_str}")
                 continue
 
-            # Reject sentinel dates (website uses 01/01/0001 as placeholder)
-            if effective_date.year < 1889:
-                if self.logger:
-                    self.logger.warning(
-                        f"Sentinel date {effective_str} for {rule_url} — skipping version"
-                    )
-                continue
+            sentinel = effective_date.year < 1889   # site placeholder 01/01/0001
+            if sentinel:
+                effective_date = None
 
             obsolete_date = self._parse_date(obsolete_str) if obsolete_str else None
 
@@ -215,13 +217,34 @@ class VersionHistoryExtractor:
 
             is_current = obsolete_date is None
 
-            versions.append(RuleVersion(
+            rv = RuleVersion(
                 effective_date=effective_date,
                 obsolete_date=obsolete_date,
-                url=version_url,
+                url=version_url or rule_url,
                 version_suffix=version_suffix,
                 is_current=is_current,
-            ))
+                date_unpublished=sentinel,
+            )
+            (sentinels if sentinel else versions).append(rv)
+
+        if sentinels:
+            if versions:
+                # A dated history AND a placeholder row: the dated rows are the
+                # record; the placeholder cannot be ordered against them.
+                if self.logger:
+                    self.logger.warning(
+                        f"{len(sentinels)} sentinel-dated row(s) alongside "
+                        f"{len(versions)} dated version(s) for {rule_url} — dropped"
+                    )
+            else:
+                # The page's only version: current text, effective date not
+                # published by the court.
+                if self.logger:
+                    self.logger.info(
+                        f"Effective date not published for {rule_url} — "
+                        f"taking the page as the current text"
+                    )
+                versions.append(sentinels[0])
 
         return versions
 

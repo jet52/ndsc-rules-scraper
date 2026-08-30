@@ -12,6 +12,9 @@ from typing import List, Optional
 from scraper.historical_version_fetcher import RuleVersionContent
 
 
+# Subject tail of a commit whose version the court dates 01/01/0001.
+UNPUBLISHED_SUBJECT = "Current text (effective date not published)"
+
 class GitVersionManager:
     """Manages a git repository representing rule version history."""
 
@@ -180,7 +183,7 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
         self,
         rule_number: str,
         markdown_content: str,
-        effective_date: date,
+        effective_date: Optional[date],
         rule_title: str,
         commit_body: str = "",
         url: str = "",
@@ -209,9 +212,15 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
             filepath.write_text(markdown_content, encoding='utf-8')
             self._run_git('add', filename)
 
-            # Build commit message
-            date_str = effective_date.strftime('%B %d, %Y')
-            subject = f"Rule {rule_number}: Update effective {date_str}"
+            # Build commit message. A None effective date is the court's own
+            # "01/01/0001" placeholder: the commit is dated at scrape time and
+            # its subject is the marker downstream readers key on
+            # (get_rule_effective_date here; ingest_rules in ndlaw-mcp).
+            if effective_date is None:
+                subject = f"Rule {rule_number}: {UNPUBLISHED_SUBJECT}"
+            else:
+                date_str = effective_date.strftime('%B %d, %Y')
+                subject = f"Rule {rule_number}: Update effective {date_str}"
 
             if commit_body:
                 message = f"{subject}\n\n{commit_body}"
@@ -221,6 +230,9 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
                 if url:
                     body_parts.append(f"Source: {url}")
                 body_parts.append(f"Status: {status}")
+                if effective_date is None:
+                    body_parts.append("Effective date: not published (the court's "
+                                      "version table shows 01/01/0001)")
                 message = f"{subject}\n\n" + '\n'.join(body_parts)
 
             self._commit(message=message, commit_date=effective_date)
@@ -336,7 +348,9 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
         date_str = None
         for line in result.stdout.splitlines():
             iso, _, subject = line.partition('\t')
-            if 'Silent correction' in subject:
+            if 'Silent correction' in subject or UNPUBLISHED_SUBJECT in subject:
+                # An unpublished-date commit is dated at SCRAPE time; it
+                # carries no effective date either.
                 continue
             date_str = iso.strip()
             break
