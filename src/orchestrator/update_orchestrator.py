@@ -484,6 +484,31 @@ class UpdateOrchestrator:
                     anchor_idx, matched = self._reanchor_by_text(
                         rule_number, version_history, git_manager
                     )
+                    if anchor_idx is None and all(
+                        v.effective_date > local_date for v in version_history.versions
+                    ):
+                        # A rule number reused for a NEW rule: the page's whole
+                        # version history postdates our local version, so
+                        # nothing on the site can anchor it and every web
+                        # version is missing by definition. N.D.R.Ct. 11.10
+                        # (Title and Citation, eff. 2025-03-01) became
+                        # Reliable Electronic Means Proceedings, adopted
+                        # 2026-09-01 with a one-entry history; the old content
+                        # moved to 11.11. The local file's last version stays
+                        # in git as the prior rule's text under that number.
+                        if self.logger:
+                            self.logger.warning(
+                                f"  Rule {rule_number}: every web version postdates the "
+                                f"local effective date {local_date} — treating as a "
+                                f"REUSED NUMBER and taking all {len(version_history.versions)} "
+                                f"web version(s) as new"
+                            )
+                        stats.setdefault('reused_numbers', []).append({
+                            'rule_number': rule_number,
+                            'local_date': str(local_date),
+                            'web_dates': [str(v.effective_date) for v in version_history.versions],
+                        })
+                        anchor_idx = -1
                     if anchor_idx is None:
                         if self.logger:
                             self.logger.warning(
@@ -501,7 +526,9 @@ class UpdateOrchestrator:
                     # restate it (the git commit date and any downstream
                     # point-in-time store both encode it). Surface it loudly
                     # rather than silently adopting the site's new date.
-                    if self.logger:
+                    if anchor_idx == -1:
+                        matched = None
+                    if matched is not None and self.logger:
                         self.logger.warning(
                             f"  Rule {rule_number} appears RE-DATED by the court: local "
                             f"effective date {local_date} is absent from the web version "
@@ -509,12 +536,13 @@ class UpdateOrchestrator:
                             f"{matched.effective_date}. Re-anchoring there; the local date "
                             f"needs manual correction."
                         )
-                    stats['redated'].append({
-                        'rule_number': rule_number,
-                        'local_date': str(local_date),
-                        'web_date': str(matched.effective_date),
-                        'url': matched.url,
-                    })
+                    if matched is not None:
+                        stats['redated'].append({
+                            'rule_number': rule_number,
+                            'local_date': str(local_date),
+                            'web_date': str(matched.effective_date),
+                            'url': matched.url,
+                        })
 
                 # Versions after the anchor are missing
                 missing_versions = version_history.versions[anchor_idx + 1:]

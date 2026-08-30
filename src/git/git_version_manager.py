@@ -322,11 +322,27 @@ All rules sourced from the [North Dakota Courts website](https://www.ndcourts.go
             The effective date, or None if the file has no commits.
         """
         filename = self._rule_filename(rule_number)
-        result = self._run_git('log', '-1', '--format=%aI', '--', filename)
+        # Walk newest-first and skip silent corrections: their author date is
+        # the DETECTION date ("Recorded at the time the change was detected"),
+        # not an effective date, so it never appears in the site's version
+        # history. Reading it as the effective date wedged every silently
+        # corrected rule: on 2026-08-28 Rules 3.1 and 11.2 (corrected
+        # 2026-06-03) failed to anchor and their September 1, 2026 amendments
+        # were skipped, while 3.4 and 8.3 logged "Unexpected state" (local date
+        # newer than the web's) for the same reason.
+        result = self._run_git('log', '--format=%aI%x09%s', '--', filename)
         if result.returncode != 0 or not result.stdout.strip():
             return None
+        date_str = None
+        for line in result.stdout.splitlines():
+            iso, _, subject = line.partition('\t')
+            if 'Silent correction' in subject:
+                continue
+            date_str = iso.strip()
+            break
+        if not date_str:
+            return None
         # Parse ISO 8601 date like "2024-03-01T12:00:00"
-        date_str = result.stdout.strip()
         try:
             return datetime.fromisoformat(date_str).date()
         except ValueError:
