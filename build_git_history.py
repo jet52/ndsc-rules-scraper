@@ -31,7 +31,7 @@ def _run_update(args, config, logger):
     from orchestrator.update_orchestrator import UpdateOrchestrator
 
     # Determine categories
-    combined_mode = args.all
+    combined_mode = args.all or args.combined
     if args.all:
         categories = [
             k for k, v in config.get('git', {}).get('categories', {}).items()
@@ -124,7 +124,7 @@ def _run_fix_crossrefs(args, config, logger):
     from git.git_version_manager import GitVersionManager
 
     base_repo_dir = config.get('git', {}).get('repo_dir', 'data/rules')
-    combined_mode = args.all
+    combined_mode = args.all or args.combined
     apply_mode = args.apply
 
     if args.all:
@@ -502,6 +502,12 @@ examples:
         '--all', '-a',
         action='store_true',
         help='Build combined repo with all enabled categories as subdirectories',
+    )
+    parser.add_argument(
+        '--combined',
+        action='store_true',
+        help='With --category: operate on that category inside the combined '
+             'repo (repo_dir root) instead of a standalone per-category repo',
     )
     parser.add_argument(
         '--config', '-c',

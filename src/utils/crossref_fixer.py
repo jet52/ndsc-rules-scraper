@@ -72,8 +72,15 @@ class CrossReferenceFixer:
         link_category = match.group(2)
         slug = match.group(3)
 
-        # Sub-path slugs (e.g., appendix/1) — no local file, use full URL
+        # Sub-path slugs: appendix-of-forms subpages resolve to their local
+        # rule-Form-N.md; anything else has no local file, use full URL
         if '/' in slug:
+            form = re.fullmatch(r'appendix/(\d+[A-Za-z]?)', slug, re.IGNORECASE)
+            if form:
+                resolved = self._resolve_file(link_category,
+                                              f"Form-{form.group(1).lower()}")
+                if resolved:
+                    return f"[{text}]({resolved})"
             url = f"https://www.ndcourts.gov/legal-resources/rules/{link_category}/{slug}"
             return f"[{text}]({url})"
 

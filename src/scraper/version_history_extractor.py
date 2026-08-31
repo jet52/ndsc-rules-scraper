@@ -76,8 +76,11 @@ class VersionHistoryExtractor:
                     is_current=True,
                 )]
 
-        # Sort oldest to newest (an unpublished date can only be the sole version)
-        versions.sort(key=lambda v: v.effective_date or date.min)
+        # Sort oldest to newest (an unpublished date can only be the sole
+        # version); within a same-dated twin pair the current version sorts
+        # last so it ends the chain (Form 7(a) has two 03/01/1998 rows, one
+        # obsolete 1999, one current)
+        versions.sort(key=lambda v: (v.effective_date or date.min, v.is_current))
 
         history = VersionHistory(
             rule_number=rule_number,
@@ -127,7 +130,14 @@ class VersionHistoryExtractor:
         r'^\s*appendix\s+([A-Za-z])\b(?:\.?\s+to\s+rule\s+(\d+(?:\.\d+)*))?',
         re.IGNORECASE,
     )
+    # Appendix-of-forms pages (ndrcivp/appendix/1, ndrcrimp/appendix/7a)
+    # title themselves "FORM N.", "FORM N(a).", or "FORM NA."; they are
+    # versioned rule pages like any other and file as rule-Form-N[x].md.
+    _FORM_RE = re.compile(r'^\s*form\s+(\d+)\s*(?:\(\s*([A-Za-z])\s*\)|'
+                          r'([A-Za-z])(?=\.|\s|$))?', re.IGNORECASE)
     _SLUG_RE = re.compile(r'/legal-resources/rules/[^/]+/([\w][\w-]*)$')
+    _FORM_SLUG_RE = re.compile(
+        r'/legal-resources/rules/[^/]+/appendix/(\d+[A-Za-z]?)$')
 
     def _extract_rule_number(self, title: str, url: str) -> str:
         """Extract the rule identifier used to name the mirror file.
@@ -151,11 +161,25 @@ class VersionHistoryExtractor:
                 ident += f"-to-rule-{match.group(2)}"
             return ident
 
+        # "FORM 1. SUMMONS" -> "Form-1"; "FORM 7(a)." -> "Form-7a";
+        # "FORM 9A." -> "Form-9a". The letter is normalized lowercase to
+        # match the URL slug (the court itself mixes "7(a)" and "9A"); the
+        # stored heading keeps the court's exact designation.
+        match = self._FORM_RE.match(title)
+        if match:
+            letter = (match.group(2) or match.group(3) or "").lower()
+            return f"Form-{match.group(1)}{letter}"
+
         # Fallback to URL slug (last path segment): "Table-A", "Appendix",
         # "preamble", "canon-1", "9A".
         url_match = self._SLUG_RE.search(url)
         if url_match:
             return url_match.group(1)
+
+        # Appendix-of-forms subpage URL when the title carries no designator
+        url_match = self._FORM_SLUG_RE.search(url)
+        if url_match:
+            return f"Form-{url_match.group(1).lower()}"
 
         return "unknown"
 
@@ -212,7 +236,18 @@ class VersionHistoryExtractor:
                 version_url = urljoin(self.BASE_URL, href)
                 # Compare link slug against base slug to find version suffix
                 link_slug = href.rstrip('/').split('/')[-1]
-                if link_slug != base_slug and link_slug.startswith(base_slug + '-'):
+                low_link, low_base = link_slug.lower(), base_slug.lower()
+                if low_link != low_base and not low_link.startswith(low_base + '-'):
+                    # A row linking a DIFFERENT instrument's page: sibling
+                    # appendix forms share one version widget (Form 9's
+                    # table lists Form 9A's page as its "2020 version").
+                    # That page is not a version of this rule.
+                    if self.logger:
+                        self.logger.info(
+                            f"Skipping version row linking foreign slug "
+                            f"{link_slug!r} on {rule_url} (base {base_slug!r})")
+                    continue
+                if low_link != low_base and low_link.startswith(low_base + '-'):
                     version_suffix = link_slug[len(base_slug) + 1:]
 
             is_current = obsolete_date is None

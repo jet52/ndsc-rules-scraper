@@ -14,6 +14,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 from scraper.version_history_extractor import VersionHistory, RuleVersion
+from scraper.content_repairs import apply_repairs
 
 
 # Pattern matching /legal-resources/rules/{category}/{slug}
@@ -37,8 +38,14 @@ def _convert_rule_link(href: str, current_category: str) -> str:
     category = m.group(1)
     slug = m.group(2)
 
-    # Sub-path slugs (e.g., appendix/1) have no local file — use full URL
     if '/' in slug:
+        # Appendix-of-forms subpages now have local files (rule-Form-N.md)
+        fm = re.fullmatch(r'appendix/(\d+[A-Za-z]?)', slug, re.IGNORECASE)
+        if fm:
+            fname = f"rule-Form-{fm.group(1).lower()}.md"
+            return fname if category == current_category \
+                else f"../{category}/{fname}"
+        # Other sub-path slugs have no local file — use full URL
         return f"https://www.ndcourts.gov{href}"
 
     if category == current_category:
@@ -137,6 +144,7 @@ class HistoricalVersionFetcher:
 
             title = self._extract_title(soup, history.rule_title)
             markdown = self._html_to_markdown(soup, title, version)
+            markdown = apply_repairs(version.url, markdown, self.logger)
 
             return RuleVersionContent(
                 rule_number=history.rule_number,
@@ -363,11 +371,25 @@ class HistoricalVersionFetcher:
                     items.append(f"- {text}")
         return '\n'.join(items)
 
+    @staticmethod
+    def _cell_text(cell: Tag) -> str:
+        """Flatten one table cell to a single pipe-safe line.
+
+        Cells carry nested <p>/<br> structure (form caption blocks) whose
+        get_text() would run lines together with no separator ("AppellateRule")
+        or emit literal newlines that break the pipe row. A space separator
+        keeps every word boundary; the pipe escape keeps cell text from
+        splitting the row.
+        """
+        text = cell.get_text(' ')
+        text = text.replace('\xa0', ' ').replace('|', '\\|')
+        return re.sub(r'\s+', ' ', text).strip()
+
     def _table_to_markdown(self, table: Tag) -> str:
         """Convert a table to markdown."""
         rows = []
         for tr in table.find_all('tr'):
-            cells = [td.get_text().strip() for td in tr.find_all(['td', 'th'])]
+            cells = [self._cell_text(td) for td in tr.find_all(['td', 'th'])]
             if any(cells):
                 rows.append('| ' + ' | '.join(cells) + ' |')
             # Add header separator after first row

@@ -4,17 +4,68 @@ Extracts rule links from a category index page.
 """
 
 import re
+import time
 from typing import Dict, List, Optional
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 
+# Appendix-of-forms subpages: /legal-resources/rules/{cat}/appendix/{n}.
+# The category index never links these; only the category's own Appendix
+# page does (N.D.R.Civ.P. has 24, N.D.R.Crim.P. 18). Each is a full
+# versioned rule page filed as rule-Form-{n}.md.
+_FORM_SUBPAGE_RE = re.compile(
+    r'/legal-resources/rules/([a-z]+)/appendix/(\d+[A-Za-z]?)$')
+
+
+def fetch_form_links(
+    session: requests.Session,
+    appendix_url: str,
+    logger=None,
+) -> List[Dict]:
+    """Fetch an Appendix-of-forms page and extract its form subpage links.
+
+    Returns entries shaped like fetch_rule_links's ('url', 'title',
+    'rule_number'), with rule_number 'Form-{n}'.
+    """
+    try:
+        response = session.get(appendix_url, timeout=30)
+        if response.status_code != 200:
+            if logger:
+                logger.warning(
+                    f"Failed to fetch appendix page {appendix_url}: "
+                    f"HTTP {response.status_code}")
+            return []
+    except requests.exceptions.RequestException as e:
+        if logger:
+            logger.warning(f"Request error for appendix page {appendix_url}: {e}")
+        return []
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+    out, seen = [], set()
+    for link in soup.find_all('a', href=True):
+        m = _FORM_SUBPAGE_RE.search(link['href'])
+        if not m:
+            continue
+        full_url = urljoin('https://www.ndcourts.gov', link['href'])
+        if full_url in seen:
+            continue
+        seen.add(full_url)
+        out.append({
+            'url': full_url,
+            'title': link.get_text().strip(),
+            'rule_number': f"Form-{m.group(2).lower()}",
+        })
+    return out
+
 
 def fetch_rule_links(
     session: requests.Session,
     category_url: str,
     logger=None,
+    follow_appendix: bool = True,
+    request_delay: float = 1.0,
 ) -> List[Dict]:
     """
     Fetch a category index page and extract links to individual rules.
@@ -99,7 +150,24 @@ def fetch_rule_links(
             'rule_number': match.group(1),
         })
 
-    # Sort by rule number: numeric first, then non-numeric (appendices)
+    # Follow appendix-of-forms container pages: their form subpages are
+    # versioned rule pages the index never lists.
+    if follow_appendix:
+        for entry in list(rule_links):
+            if entry['rule_number'].lower() != 'appendix':
+                continue
+            time.sleep(request_delay)
+            forms = fetch_form_links(session, entry['url'], logger)
+            if forms and logger:
+                logger.info(
+                    f"Found {len(forms)} appendix form page(s) under {entry['url']}")
+            for f in forms:
+                if f['url'] not in seen_urls:
+                    seen_urls.add(f['url'])
+                    rule_links.append(f)
+
+    # Sort by rule number: numeric first, then non-numeric (appendices),
+    # then appendix forms in numeric order
     def _sort_key(r):
         rn = r['rule_number']
         # Try pure numeric
@@ -111,6 +179,9 @@ def fetch_rule_links(
         parts = rn.split('-')
         if parts[0].isdigit():
             return (0, float(parts[0]), '-'.join(parts[1:]))
+        form = re.fullmatch(r'Form-(\d+)([A-Za-z]?)', rn)
+        if form:
+            return (2, float(form.group(1)), form.group(2).lower())
         # Non-numeric (appendix-a) -> sort after all numeric rules
         return (1, 0, rn)
 
