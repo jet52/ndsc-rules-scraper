@@ -6,7 +6,7 @@ Extracts rule links from a category index page.
 import re
 import time
 from typing import Dict, List, Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -95,16 +95,25 @@ def fetch_rule_links(
     rule_links = []
     seen_urls = set()
 
+    # Only links INTO THIS category are rules of this category. The court's
+    # indexes cross-link: the Administrative Orders index carries an entry
+    # "Revised and Adopted as Rule 21" whose href is Administrative RULE 21's
+    # page (/ndsupctadminr/21). Matching any category filed that page as
+    # Order 21 and flipped ndsupctadminorder/rule-21.md between Rule 21's
+    # text and Order 21's every run (8 "silent correction" commits, 2026-07
+    # to 2026-09-11). The category slug comes from the index URL itself.
+    # Strict URL pattern: /legal-resources/rules/{this category}/{slug}.
+    # Matches numeric (28), hyphenated (6-1), and appendix (appendix-a) slugs.
+    # The $ anchor prevents matching sub-pages like /9/appendix-jury-standards.
+    category = urlparse(category_url).path.rstrip('/').rsplit('/', 1)[-1]
+    pattern = rf'/legal-resources/rules/{re.escape(category)}/([\w][\w-]*)$'
+
     # Extract rule links from the page
     for link in soup.find_all('a', href=True):
         href = link.get('href', '')
         text = link.get_text().strip()
 
-        # Use strict URL pattern: /legal-resources/rules/{category}/{slug}
-        # Matches numeric (28), hyphenated (6-1), and appendix (appendix-a) slugs.
-        # The $ anchor prevents matching sub-pages like /9/appendix-jury-standards.
-        pattern = r'/legal-resources/rules/[a-z]+/([\w][\w-]*)$'
-        match = re.search(pattern, href)
+        match = re.search(pattern, href, re.IGNORECASE)
         if not match:
             continue
 
@@ -130,8 +139,7 @@ def fetch_rule_links(
         href = option.get('value', '')
         text = option.get_text().strip()
 
-        pattern = r'/legal-resources/rules/[a-z]+/([\w][\w-]*)$'
-        match = re.search(pattern, href)
+        match = re.search(pattern, href, re.IGNORECASE)
         if not match:
             continue
 
