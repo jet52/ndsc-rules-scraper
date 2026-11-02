@@ -48,11 +48,10 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Set the Anthropic API key for AI-generated commit messages (optional):
-
-```bash
-export ANTHROPIC_API_KEY="sk-..."
-```
+No API key is needed. Commit bodies and the explanatory-note sidecars are
+built from the court's own text without a model. (Only the optional
+`--proofread-api` mode calls the Anthropic API; set `ANTHROPIC_API_KEY` for
+that alone.)
 
 ## Usage
 
@@ -149,8 +148,9 @@ Reports are written to `{repo_dir}/{category}/proofreading-report.md` (and `.jso
 Inside each repo:
 
 - `rule-{number}.md` — one file per rule (e.g., `rule-28.md`, `rule-6.1.md`, `rule-appendix-a.md`)
+- `notes/rule-{number}.md` — the court's cumulative explanatory note for the rule, verbatim, under a two-line header (title, source URL). Committed at observation time, so its git history shows the note growing as the court amends the rule.
 - Git history with commits dated to each version's effective date
-- Commit messages include explanatory notes and committee minutes context
+- Each version's commit body carries the paragraphs of the explanatory note that name that version's effective date, verbatim, plus the committee meetings the note's SOURCES paragraph dates to that version's window. Where the note has no paragraph for the date the body says so in a fixed sentence.
 
 Browse the history:
 
@@ -166,8 +166,8 @@ git log --before="2010-01-01" --oneline  # versions before a date
 1. **Discovery** — Fetches the category index page and extracts links to each rule
 2. **Version extraction** — For each rule, parses the version history table to find all historical versions with effective/obsolete dates
 3. **Content fetching** — Downloads the HTML for each version and converts it to markdown
-4. **Commit message building** — Extracts explanatory notes; optionally uses Claude to summarize committee minutes for richer commit messages
-5. **Git construction** — Commits each version chronologically with `GIT_AUTHOR_DATE` set to the effective date
+4. **Commit message building** — Slices the paragraphs of the court's explanatory note that name this version's effective date (`src/scraper/explanatory_notes.py`); deterministic, no model
+5. **Git construction** — Commits each version chronologically with `GIT_AUTHOR_DATE` set to the effective date, then one observation-dated commit per category for the explanatory-note sidecars
 
 ## Configuration
 
@@ -181,7 +181,7 @@ cp config.example.yaml config.yaml
 
 - `git.categories` — enable/disable categories, set base URLs
 - `git.repo_dir` — base directory for output repositories
-- `anthropic` — API key and model settings for commit messages
+- `anthropic.api_key` — only for the optional `--proofread-api` mode
 - `version_history.request_delay` — seconds between HTTP requests (be respectful)
 
 ## Project Structure
@@ -197,8 +197,9 @@ src/
   scraper/
     version_history_extractor.py      # Parses version tables from HTML
     historical_version_fetcher.py     # Downloads version content as markdown
-    committee_minutes_fetcher.py      # Fetches committee meeting minutes
-    commit_message_builder.py         # Builds rich commit messages
+    explanatory_notes.py              # Note slicing by date, SOURCES parsing, sidecar format
+    commit_message_builder.py         # Builds each version's commit body from the note
+    committee_minutes_fetcher.py      # Fetches committee meeting minutes (unused since 2026-11-02)
     rule_link_fetcher.py              # Extracts rule links from index pages
   git/
     git_version_manager.py            # Git repo init and commit operations

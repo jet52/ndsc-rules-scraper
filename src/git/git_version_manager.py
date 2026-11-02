@@ -10,10 +10,17 @@ from pathlib import Path
 from typing import List, Optional
 
 from scraper.historical_version_fetcher import RuleVersionContent
+from scraper import explanatory_notes as xn
 
 
 # Subject tail of a commit whose version the court dates 01/01/0001.
 UNPUBLISHED_SUBJECT = "Current text (effective date not published)"
+
+# Subject tail of a commit that only updates explanatory-note sidecars. Dated
+# at OBSERVATION time (the note is cumulative and carries no date of its
+# own), so readers of a rule's effective date must skip it — but it never
+# touches a rule file, so get_rule_effective_date never sees it anyway.
+NOTES_SUBJECT = "Explanatory notes"
 
 class GitVersionManager:
     """Manages a git repository representing rule version history."""
@@ -38,6 +45,59 @@ class GitVersionManager:
         if self.category_prefix:
             return f"{self.category_prefix}/{base}"
         return base
+
+    def _notes_filename(self, rule_number: str) -> str:
+        """Relative path of the rule's explanatory-note sidecar."""
+        return xn.sidecar_relpath(rule_number, self.category_prefix)
+
+    def get_notes_content(self, rule_number: str) -> Optional[str]:
+        """The committed sidecar text, or None if the rule has none yet."""
+        filepath = self.repo_dir / self._notes_filename(rule_number)
+        if not filepath.exists():
+            return None
+        return filepath.read_bytes().decode('utf-8')
+
+    def commit_notes(self, changes: List[tuple], category_label: str = "") -> bool:
+        """Write and commit explanatory-note sidecars in ONE commit, dated now.
+
+        ``changes`` is a list of ``(rule_number, sidecar_text, url)``. The
+        sidecar is the court's cumulative note as observed on this run: it is
+        not a version of the rule and has no effective date, so the commit is
+        never backdated and touches no rule file. One commit per category per
+        run keeps the mirror's history readable when every rule's note lands
+        at once (the initial capture) and when the court's cycle amends
+        dozens of notes on the same day.
+        """
+        if not changes:
+            return True
+        try:
+            for rule_number, text, _url in changes:
+                filename = self._notes_filename(rule_number)
+                filepath = self.repo_dir / filename
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                filepath.write_text(text, encoding='utf-8')
+                self._run_git('add', filename)
+
+            label = f" ({category_label})" if category_label else ""
+            if len(changes) == 1:
+                subject = f"Rule {changes[0][0]}: {NOTES_SUBJECT} updated{label}"
+            else:
+                subject = f"{NOTES_SUBJECT}: {len(changes)} rules updated{label}"
+            body = ["The court's cumulative explanatory note for each rule, "
+                    "verbatim, as published on ndcourts.gov at the time of this "
+                    "commit.", ""]
+            for rule_number, _text, url in changes:
+                body.append(f"Rule {rule_number}" + (f" — {url}" if url else ""))
+            message = subject + "\n\n" + "\n".join(body)
+            ok = self._commit(message=message)
+            if ok and self.logger:
+                self.logger.info(
+                    f"Committed explanatory notes for {len(changes)} rule(s){label}")
+            return ok
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Failed to commit explanatory notes: {e}")
+            return False
 
     def initialize_repository(
         self,

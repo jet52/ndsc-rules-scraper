@@ -61,12 +61,26 @@ The main entry point is `build_git_history.py`. It wires up the orchestrator whi
 1. `version_history_orchestrator.py` — fetches the category index page, discovers rules, collects all versions across all rules, sorts globally by date, then commits chronologically
 2. `version_history_extractor.py` — parses a rule's HTML page to extract the version history table (effective dates, version URLs, suffixes) and explanatory notes
 3. `historical_version_fetcher.py` — downloads each version's HTML and converts to markdown
-4. `committee_minutes_fetcher.py` — fetches committee meeting minutes PDFs for commit context
-5. `commit_message_builder.py` — builds commit messages from explanatory notes and minutes (optionally uses Claude Haiku)
+4. `explanatory_notes.py` — the court's cumulative explanatory note: slices the paragraphs naming one version's effective date (verbatim; fixed sentence when none), parses the SOURCES paragraph into dated committee-minutes entries, renders/parses the sidecar file. Deterministic — no API, no model (the Haiku step was removed 2026-11-02)
+5. `commit_message_builder.py` — builds each version's commit body from (4): title / Source / Status, "Explanatory Notes:" + the date slice, and the SOURCES entries dated to the version's window. `committee_minutes_fetcher.py` is no longer wired in
 6. `git_version_manager.py` — manages git init, file writes, and commits with backdated author/committer dates
 7. `update_orchestrator.py` — incremental update mode: compares current web content against local repos, amends commits for minor corrections, creates new commits for genuine amendments
 8. `rule_link_fetcher.py` — shared module for extracting rule links from category index pages (used by both orchestrators)
 9. `crossref_fixer.py` — post-processes rule files to convert absolute `/legal-resources/rules/` URLs to relative local links; resolves against actual files on disk
+
+## Explanatory-note sidecars
+
+Each rule's cumulative explanatory note is stored verbatim at
+`<category>/notes/rule-<n>.md` (header: `# Explanatory Notes — <title>`, a
+`Source:` line, then the note's paragraphs). The sidecar is NOT a version of
+the rule: it is committed at observation time, never backdated, in ONE commit
+per category per run (`GitVersionManager.commit_notes`, subject
+`Explanatory notes: N rules updated (<category>)`). The `notes/` subdirectory
+keeps it out of every `rule-*.md` glob here and out of ndlaw-mcp's
+`ingest_rules` rule-file filter. The update orchestrator compares the page's
+note with the sidecar on every run; a page whose note block reads EMPTY while
+the sidecar has text is HELD (logged, not overwritten) — the extractor cannot
+tell a missing block from an empty one.
 
 ## Rule ID Formats
 

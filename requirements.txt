@@ -1,7 +1,9 @@
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
-anthropic>=0.7.0
+# anthropic — not required. Commit bodies are built without a model since
+# 2026-11-02; only the optional `--proofread-api` mode imports it. Install by
+# hand if you use that mode.
 pyyaml>=6.0
 click>=8.1.0
 python-dateutil>=2.8.0

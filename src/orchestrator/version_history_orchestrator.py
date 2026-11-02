@@ -16,9 +16,9 @@ from bs4 import BeautifulSoup
 
 from scraper.version_history_extractor import VersionHistoryExtractor
 from scraper.historical_version_fetcher import HistoricalVersionFetcher
-from scraper.committee_minutes_fetcher import CommitteeMinutesFetcher
 from scraper.commit_message_builder import CommitMessageBuilder
 from scraper.rule_link_fetcher import fetch_rule_links
+from scraper import explanatory_notes as xn
 from git.git_version_manager import GitVersionManager
 
 
@@ -67,60 +67,9 @@ class VersionHistoryOrchestrator:
         self.git_author_email = git_config.get('author_email', 'rules@ndcourts.gov')
         self.git_base_dir = git_config.get('repo_dir', 'data/rules')
 
-        # Initialize committee minutes fetcher and commit message builder
-        vh_config = self.config.get('version_history', {})
-        minutes_cache_dir = vh_config.get(
-            'minutes_cache_dir',
-            os.path.join(self.git_base_dir, '..', 'minutes_cache'),
-        )
-
-        self.committee_fetcher = CommitteeMinutesFetcher(
-            session=self.session,
-            cache_dir=minutes_cache_dir,
-            logger=logger,
-            request_delay=request_delay,
-        )
-
-        anthropic_client = self._create_anthropic_client()
-        anthropic_config = self.config.get('anthropic', {})
-
-        self.commit_message_builder = CommitMessageBuilder(
-            anthropic_client=anthropic_client,
-            committee_fetcher=self.committee_fetcher,
-            haiku_model=anthropic_config.get('haiku_model', 'claude-haiku-4-5-20251001'),
-            max_tokens=anthropic_config.get('max_tokens', 1000),
-            temperature=anthropic_config.get('temperature', 0.1),
-            logger=logger,
-        )
-
-    def _create_anthropic_client(self):
-        """Create an Anthropic API client if an API key is available."""
-        api_key = os.environ.get('ANTHROPIC_API_KEY') or self.config.get('anthropic', {}).get('api_key', '')
-        if not api_key:
-            if self.logger:
-                self.logger.info(
-                    "No Anthropic API key found. "
-                    "Commit messages will use regex-based note trimming."
-                )
-            return None
-
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=api_key)
-            if self.logger:
-                self.logger.info("Anthropic client initialized for commit message generation")
-            return client
-        except ImportError:
-            if self.logger:
-                self.logger.warning(
-                    "anthropic package not installed. "
-                    "Commit messages will use regex-based note trimming."
-                )
-            return None
-        except Exception as e:
-            if self.logger:
-                self.logger.warning(f"Failed to create Anthropic client: {e}")
-            return None
+        # Commit bodies are sliced from the court's explanatory note
+        # deterministically (no API, no model — see commit_message_builder).
+        self.commit_message_builder = CommitMessageBuilder(logger=logger)
 
     def _load_config(self, config_path: str) -> dict:
         try:
@@ -200,6 +149,7 @@ class VersionHistoryOrchestrator:
 
         # Step 3: Collect ALL versions across ALL rules, then sort globally by date
         all_version_work = []
+        notes_work = []  # (rule_number, sidecar_text, url) — committed last
 
         for i, rule_link in enumerate(rule_links):
             rule_url = rule_link['url']
@@ -226,6 +176,13 @@ class VersionHistoryOrchestrator:
                         self.logger.warning(f"No versions found for {rule_url}")
                     stats['errors'].append(f"No versions for {rule_url}")
                     continue
+
+                notes_work.append((
+                    version_history.rule_number,
+                    xn.render_sidecar(version_history.rule_title, rule_url,
+                                      version_history.explanatory_notes),
+                    rule_url,
+                ))
 
                 # Fetch all historical version content
                 version_contents = self.version_fetcher.fetch_all_versions(version_history)
@@ -293,6 +250,13 @@ class VersionHistoryOrchestrator:
                 stats['versions_committed'] += 1
 
             prev_dates[content.rule_number] = content.effective_date
+
+        # Step 6: the explanatory-note sidecars, one observation-dated commit
+        # after the backdated version history.
+        if self.git_manager.commit_notes(notes_work, category_label=category):
+            stats['notes_committed'] = len(notes_work)
+        else:
+            stats['errors'].append(f"Explanatory-note commit failed for {category}")
 
         stats['end_time'] = time.time()
         stats['duration_seconds'] = stats['end_time'] - stats['start_time']
@@ -375,6 +339,7 @@ class VersionHistoryOrchestrator:
         # Collect ALL versions across ALL categories
         # Each entry is (category, content) so we can set category_prefix per commit
         all_version_work: List[tuple] = []
+        notes_work: Dict[str, List[tuple]] = {}  # category -> [(rule, sidecar, url)]
 
         for category in categories:
             category_config = self.config.get('git', {}).get('categories', {}).get(category, {})
@@ -416,6 +381,13 @@ class VersionHistoryOrchestrator:
                             self.logger.warning(f"No versions found for {rule_url}")
                         stats['errors'].append(f"No versions for {rule_url}")
                         continue
+
+                    notes_work.setdefault(category, []).append((
+                        version_history.rule_number,
+                        xn.render_sidecar(version_history.rule_title, rule_url,
+                                          version_history.explanatory_notes),
+                        rule_url,
+                    ))
 
                     version_contents = self.version_fetcher.fetch_all_versions(version_history)
 
@@ -484,6 +456,17 @@ class VersionHistoryOrchestrator:
                 stats['versions_committed'] += 1
 
             prev_dates[date_key] = content.effective_date
+
+        # Explanatory-note sidecars: one observation-dated commit per category
+        # after every backdated version commit.
+        stats['notes_committed'] = 0
+        for category in categories:
+            work = notes_work.get(category, [])
+            self.git_manager.category_prefix = category
+            if self.git_manager.commit_notes(work, category_label=category):
+                stats['notes_committed'] += len(work)
+            else:
+                stats['errors'].append(f"Explanatory-note commit failed for {category}")
 
         stats['end_time'] = time.time()
         stats['duration_seconds'] = stats['end_time'] - stats['start_time']

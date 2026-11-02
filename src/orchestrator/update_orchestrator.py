@@ -16,9 +16,9 @@ import yaml
 
 from scraper.version_history_extractor import VersionHistoryExtractor, VersionHistory
 from scraper.historical_version_fetcher import HistoricalVersionFetcher, RuleVersionContent
-from scraper.committee_minutes_fetcher import CommitteeMinutesFetcher
 from scraper.commit_message_builder import CommitMessageBuilder
 from scraper.rule_link_fetcher import fetch_rule_links
+from scraper import explanatory_notes as xn
 from git.git_version_manager import GitVersionManager
 
 
@@ -66,61 +66,11 @@ class UpdateOrchestrator:
         self.git_author_email = git_config.get('author_email', 'rules@ndcourts.gov')
         self.git_base_dir = git_config.get('repo_dir', 'data/rules')
 
-        # Initialize committee minutes fetcher and commit message builder
-        vh_config = self.config.get('version_history', {})
-        minutes_cache_dir = vh_config.get(
-            'minutes_cache_dir',
-            os.path.join(self.git_base_dir, '..', 'minutes_cache'),
-        )
-
-        self.committee_fetcher = CommitteeMinutesFetcher(
-            session=self.session,
-            cache_dir=minutes_cache_dir,
-            logger=logger,
-            request_delay=request_delay,
-        )
-
-        anthropic_client = self._create_anthropic_client()
-        anthropic_config = self.config.get('anthropic', {})
-
-        self.commit_message_builder = CommitMessageBuilder(
-            anthropic_client=anthropic_client,
-            committee_fetcher=self.committee_fetcher,
-            haiku_model=anthropic_config.get('haiku_model', 'claude-haiku-4-5-20251001'),
-            max_tokens=anthropic_config.get('max_tokens', 1000),
-            temperature=anthropic_config.get('temperature', 0.1),
-            logger=logger,
-        )
+        # Commit bodies are sliced from the court's explanatory note
+        # deterministically (no API, no model — see commit_message_builder).
+        self.commit_message_builder = CommitMessageBuilder(logger=logger)
 
         self.request_delay = request_delay
-
-    def _create_anthropic_client(self):
-        """Create an Anthropic API client if an API key is available."""
-        api_key = os.environ.get('ANTHROPIC_API_KEY') or self.config.get('anthropic', {}).get('api_key', '')
-        if not api_key:
-            if self.logger:
-                self.logger.info(
-                    "No Anthropic API key found. "
-                    "Commit messages will use regex-based note trimming."
-                )
-            return None
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=api_key)
-            if self.logger:
-                self.logger.info("Anthropic client initialized for commit message generation")
-            return client
-        except ImportError:
-            if self.logger:
-                self.logger.warning(
-                    "anthropic package not installed. "
-                    "Commit messages will use regex-based note trimming."
-                )
-            return None
-        except Exception as e:
-            if self.logger:
-                self.logger.warning(f"Failed to create Anthropic client: {e}")
-            return None
 
     def _load_config(self, config_path: str) -> dict:
         try:
@@ -168,6 +118,9 @@ class UpdateOrchestrator:
             'new_commits': 0,
             'corrections_found': 0,
             'new_amendments_found': 0,
+            'notes_changed': 0,      # sidecars that differ from the page (planned)
+            'notes_committed': 0,    # sidecars written + committed this run
+            'notes_held': [],        # rules whose page note vanished (not overwritten)
             'errors': [],
             'redated': [],
             'start_time': time.time(),
@@ -229,6 +182,7 @@ class UpdateOrchestrator:
         # Phase A: Scrape & Compare
         corrections = []     # (rule_link, new_content_str)
         new_amendments = []  # (rule_link, version_history)
+        notes_changes = []   # (rule_number, sidecar_text, url) — see _stage_notes
 
         for i, rule_link in enumerate(rule_links):
             rule_url = rule_link['url']
@@ -265,6 +219,13 @@ class UpdateOrchestrator:
                 # propagates to the correction/amendment phases via rule_link.
                 rule_number = version_history.rule_number
                 rule_link['rule_number'] = rule_number
+
+                # The page's cumulative explanatory note, compared with the
+                # committed sidecar. Independent of the rule text: a note can
+                # change without a new version (the court edits notes in
+                # place) and a version can land without a note change.
+                self._stage_notes(rule_number, version_history, rule_url,
+                                  git_manager, notes_changes, stats)
 
                 # Get the current (latest) version from the website
                 current_version = version_history.versions[-1]  # sorted oldest-first
@@ -359,9 +320,21 @@ class UpdateOrchestrator:
         # Record counts for both modes
         stats['corrections_found'] = len(corrections)
         stats['new_amendments_found'] = len(new_amendments)
+        stats['notes_changed'] = len(notes_changes)
 
         # Dry-run: report and return without applying
         if dry_run:
+            if notes_changes:
+                print()
+                print(f"--- Explanatory notes changed ({len(notes_changes)}) ---")
+                for rule_number, text, _url in notes_changes:
+                    state = "new" if git_manager.get_notes_content(rule_number) is None \
+                        else "changed"
+                    print(f"  Rule {rule_number}: {state} "
+                          f"({len(xn.paragraphs(xn.parse_sidecar(text)[2]))} paragraphs)")
+            for rule_number in stats['notes_held']:
+                print(f"  Rule {rule_number}: page note EMPTY while the sidecar has "
+                      "text — not overwritten (held)")
             if corrections:
                 print()
                 print(f"--- Corrections found ({len(corrections)}) ---")
@@ -389,8 +362,8 @@ class UpdateOrchestrator:
                     else:
                         print(f"  Rule {rule_number}: new rule (web {current_version.effective_date})")
 
-            if not corrections and not new_amendments:
-                print("\nNo corrections or new amendments detected.")
+            if not corrections and not new_amendments and not notes_changes:
+                print("\nNo corrections, new amendments, or note changes detected.")
 
             return self._finalize_stats(stats)
 
@@ -433,7 +406,54 @@ class UpdateOrchestrator:
                 new_amendments, git_manager, stats
             )
 
+        # Phase D: explanatory-note sidecars — one observation-dated commit
+        # per category, after the (backdated) version commits so the mirror's
+        # chronology stays: versions on their effective dates, notes when seen.
+        if notes_changes:
+            if git_manager.commit_notes(notes_changes, category_label=category):
+                stats['notes_committed'] = len(notes_changes)
+            else:
+                stats['errors'].append(
+                    f"Explanatory-note commit failed for {category} "
+                    f"({len(notes_changes)} rule(s))")
+
         return self._finalize_stats(stats)
+
+    def _stage_notes(self, rule_number: str, version_history: VersionHistory,
+                     rule_url: str, git_manager: GitVersionManager,
+                     notes_changes: List, stats: Dict) -> None:
+        """Queue the rule's sidecar for commit if the page's note differs
+        from the committed one.
+
+        A page whose note block is EMPTY while the sidecar has text is held,
+        not overwritten: the extractor returns "" both for a missing block
+        and for an empty one, so a transient page defect would otherwise wipe
+        a note the court still publishes. Absence must be tested for, not
+        inferred from an empty read.
+        """
+        rendered = xn.render_sidecar(version_history.rule_title, rule_url,
+                                     version_history.explanatory_notes)
+        local = git_manager.get_notes_content(rule_number)
+        if local == rendered:
+            return
+        if not xn.paragraphs(version_history.explanatory_notes):
+            if local is not None and xn.parse_sidecar(local)[2]:
+                stats['notes_held'].append(rule_number)
+                if self.logger:
+                    self.logger.warning(
+                        f"  Rule {rule_number}: page note is empty but the sidecar "
+                        "has text — holding the sidecar")
+                return
+            if local is None:
+                # No note on the page and none on disk: record the header-only
+                # sidecar once so "no note" is an observed fact, not a gap.
+                notes_changes.append((rule_number, rendered, rule_url))
+            return
+        if self.logger:
+            self.logger.info(
+                f"  Explanatory note {'new' if local is None else 'changed'}: "
+                f"Rule {rule_number}")
+        notes_changes.append((rule_number, rendered, rule_url))
 
     @staticmethod
     def _words_only(text: str) -> str:

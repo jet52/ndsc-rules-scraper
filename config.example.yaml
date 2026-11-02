@@ -1,8 +1,7 @@
 anthropic:
-  api_key: ''          # Set via env var ANTHROPIC_API_KEY or here
-  haiku_model: claude-haiku-4-5-20251001
-  max_tokens: 1000
-  temperature: 0.1
+  # Only the optional --proofread-api mode uses the API. Commit bodies and
+  # explanatory-note sidecars are built without a model (2026-11-02).
+  api_key: ''          # or env var ANTHROPIC_API_KEY
 
 logging:
   level: DEBUG

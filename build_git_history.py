@@ -79,6 +79,11 @@ def _run_update(args, config, logger):
             print(f"Amended:      {stats['amended']}")
             print(f"New amendments: {stats.get('new_amendments_found', 0)}")
             print(f"New commits:  {stats['new_commits']}")
+            print(f"Notes changed: {stats.get('notes_changed', 0)}"
+                  + ("" if dry_run else f"  (committed: {stats.get('notes_committed', 0)})"))
+            if stats.get('notes_held'):
+                print(f"Notes HELD (page note empty, sidecar kept): "
+                      f"{', '.join('Rule ' + r for r in stats['notes_held'])}")
             print(f"Duration:     {stats.get('duration_seconds', 0):.1f}s")
 
             # A re-dated version is not an error — the backfill continued — but
@@ -639,6 +644,7 @@ examples:
             print(f"Rules found:        {stats['rules_found']}")
             print(f"Rules processed:    {stats['rules_processed']}")
             print(f"Versions committed: {stats['versions_committed']}")
+            print(f"Notes committed:    {stats.get('notes_committed', 0)}")
             print(f"Duration:           {stats.get('duration_seconds', 0):.1f}s")
 
             if stats['errors']:
@@ -671,6 +677,7 @@ examples:
                 print(f"Rules found:        {stats['rules_found']}")
                 print(f"Rules processed:    {stats['rules_processed']}")
                 print(f"Versions committed: {stats['versions_committed']}")
+                print(f"Notes committed:    {stats.get('notes_committed', 0)}")
                 print(f"Duration:           {stats.get('duration_seconds', 0):.1f}s")
 
                 if stats['errors']:
